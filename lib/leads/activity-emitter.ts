@@ -40,6 +40,13 @@ export interface EmitLeadActivityInput {
   /** O QUE SUSTENTA (N referências). Obrigatório de fato para ator 'ai'. */
   evidence?: ActivityEvidence | null;
   payload?: Record<string, unknown>;
+  /**
+   * Quando o fato ACONTECEU, em ISO-8601. Ausente = a coluna usa `now()`.
+   * Só quem recebe o fato atrasado (um evento de integração que chega em lote)
+   * precisa dele: a timeline ordena por `performed_at`, e gravar a hora do envio
+   * embaralharia a sequência de eventos de um mesmo lote.
+   */
+  performedAt?: string;
 }
 
 /**
@@ -68,6 +75,8 @@ export interface LeadActivityRow {
   reason: string;
   evidence: ActivityEvidence | null;
   payload: Record<string, unknown>;
+  /** Só presente quando o emissor informou a hora do fato (ver `performedAt`). */
+  performed_at?: string;
 }
 
 /**
@@ -105,6 +114,7 @@ export function buildLeadActivityRow(input: EmitLeadActivityInput): LeadActivity
     reason: input.reason,
     evidence: temLastro ? (input.evidence ?? null) : null,
     payload: input.payload ?? {},
+    ...(input.performedAt ? { performed_at: input.performedAt } : {}),
   };
 }
 

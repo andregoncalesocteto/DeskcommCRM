@@ -280,6 +280,34 @@ inputSchema: z.object({
 
 Audit log entry com `change.from_stage_id`, `change.to_stage_id`, `reason`.
 
+#### `crm_add_lead_events`
+**No REST mirror** — porta de máquina para integrações (cardápio digital, loja virtual).
+
+Registro **append-only** na linha do tempo do pedido: cada evento vira uma linha de `crm_lead_activities`
+(`type = 'external_event'`) com a hora em que o fato aconteceu e o JSON em `payload.data`. É o que
+`crm_update_lead` não faz: ele **sobrescreve** o campo, então não guarda uma sequência de visitas.
+
+```ts
+inputSchema: z.object({
+  lead_id: z.string().uuid(),
+  events: z.array(z.strictObject({
+    event: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),   // ex.: page_view, view_item
+    at: z.string().datetime({ offset: true }).optional(), // ISO-8601; ausente = agora
+    event_id: z.string().min(1).max(100).optional(),      // com ele, reenviar o lote não duplica
+    data: z.record(z.string(), z.unknown()).optional()    // o JSON do fato
+  })).min(1).max(50)
+})
+// => { lead_id, registrados, repetidos }
+```
+
+- **Tetos**: 50 eventos por chamada, 8 KB por evento, 64 KB por chamada, `at` entre 30 dias atrás e +5 min.
+  A chamada conta **uma** escrita no teto do token (30/min), qualquer que seja o lote.
+- **Não esquenta o negócio**: `external_event` não está na lista positiva de `fn_update_last_activity_at`.
+- **Recusa** pedido de outra organização (404) e de contato marcado como pessoal (403 `contato_pessoal`).
+- **Reenvio**: sem `event_id` não há como reconhecer o evento repetido. Duas chamadas simultâneas com o mesmo
+  `event_id` podem passar as duas (a checagem é ler e inserir, sem trava).
+- Papel `agent`, escopo `mcp:write`. Regra em `lib/leads/eventos-externos.ts`.
+
 ### 3.3 Tool especial (sem espelho REST)
 
 #### `crm_request_human_handoff`

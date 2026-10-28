@@ -230,7 +230,21 @@ export type ActivityType =
    * nome do arquivo, tipo. A leitura da IA não entra no vocabulário porque a
    * própria fila é a memória dela, com trecho e decisão por proposta.
    */
-  | "document_attached";
+  | "document_attached"
+  /**
+   * UM FATO QUE UMA INTEGRAÇÃO CONTOU SOBRE O PEDIDO (`crm_add_lead_events`).
+   *
+   * O cardápio digital, a loja virtual, qualquer sistema de fora que fale com o
+   * CRM pelo MCP: cada visita, cada item visto, cada carrinho é uma linha, com a
+   * HORA EM QUE ACONTECEU e o JSON que o sistema mandou em `payload.data`.
+   *
+   * Tipo próprio, e não `note` nem `lead_edited`, porque a regra de quem esquenta
+   * o negócio olha `new.type` (`fn_update_last_activity_at`, lista positiva): um
+   * cliente que abre o cardápio vinte vezes não é "alguém tocou este negócio", e
+   * não pode zerar o relógio do Radar de Risco. Fora da lista, esta linha não
+   * esquenta nada — e é por isso que o tipo não está na migration 0079.
+   */
+  | "external_event";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou no funil",
@@ -351,6 +365,8 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // quem lê a timeline do negócio precisa saber é que um documento entrou; qual
   // campo e qual arquivo saem do payload (`field_key`/`file_name`).
   document_attached: "Documento anexado ao negócio",
+  // O que a integração contou, na voz de quem lê a timeline — sem "evento", sem "webhook".
+  external_event: "Registro de uma integração",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

@@ -82,6 +82,14 @@ const ESCRITA_QUE_E_TRABALHO_DE_ATENDENTE: ReadonlyArray<string> = [
   "crm_propose_lead_fields_from_document",
   // `app/api/v1/leads/[id]/move/` — exige `agent`. Mover card é o trabalho do dia.
   "crm_move_lead_stage",
+  // Sem espelho REST: é a porta de máquina do cardápio e de qualquer integração. A
+  // autoridade é a do PATCH de `app/api/v1/leads/[id]/` (exige `agent`), que já
+  // grava valor e campos do negócio. O poder concedido é MENOR que o dele: esta
+  // tool só ACRESCENTA linhas na linha do tempo (nunca sobrescreve campo, nunca
+  // muda a etapa) e o tipo `external_event` não esquenta o negócio — o gatilho de
+  // `last_activity_at` usa lista positiva. Recusa pedido de contato pessoal e
+  // pedido de outra organização.
+  "crm_add_lead_events",
   // `app/api/v1/messages/` — exige `agent`. Responder cliente é o trabalho do dia.
   "crm_send_whatsapp_message",
   // `app/api/v1/ai/cases/[id]/reply/` — POST exige `agent`. Registrar no chamado

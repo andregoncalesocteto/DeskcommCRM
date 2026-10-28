@@ -89,6 +89,20 @@ export const TOOLS_FUNIL = declararTools([
     pacotes: ["vender"],
   },
   {
+    name: "crm_add_lead_events",
+    category: "write",
+    rotulo: "Registrar o histórico de uma integração",
+    explicacao:
+      "Acrescenta à linha do tempo do pedido o que um sistema de fora contou, como cada visita ou item visto, sem apagar os registros anteriores.",
+    oQueToca: "Linha do tempo do pedido",
+    risco: "atencao",
+    // "organizar" e não "vender": quem usa isto é uma integração (cardápio,
+    // loja virtual) que precisa de histórico, não o agente que conversa — e em
+    // "vender" ela entraria no agente que nasce no onboarding e estouraria o teto
+    // dos outros pacotes (pacote-reserva-vaga-da-critica).
+    pacotes: ["organizar"],
+  },
+  {
     name: "crm_retomar_lead",
     category: "write",
     rotulo: "Retomar negócio encerrado como novo",

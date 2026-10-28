@@ -8,6 +8,7 @@
  *   - crm_create_lead
  *   - crm_update_lead
  *   - crm_move_lead_stage  (sem mirror REST direto; reusa moveLeadHandler)
+ *   - crm_add_lead_events  (sem mirror REST; registro append-only na linha do tempo)
  *
  * Write tools exigem role>=manager + scope mcp:write (gate no server core).
  */
@@ -22,6 +23,11 @@ import {
   retomarLeadHandler,
 } from "@/app/api/v1/leads/_handler";
 import { createLeadSchema, updateLeadSchema } from "@/lib/schemas/leads";
+import {
+  MAX_EVENTOS_POR_CHAMADA,
+  eventoExternoSchema,
+  registrarEventosDoNegocio,
+} from "@/lib/leads/eventos-externos";
 import { conferirCamposPersonalizados } from "../conferencia-de-campos";
 import { proporCamposDoNegocio } from "@/lib/leads/proposta-de-campos-por-documento";
 import { audit } from "@/lib/audit";
@@ -490,6 +496,52 @@ export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
   },
 };
 
+
+// ---------------------------------------------------------------------------
+// registrar eventos de uma integração (append-only)
+// ---------------------------------------------------------------------------
+
+const addEventsInputShape = {
+  lead_id: z.string().uuid().describe("UUID do pedido (negócio) que recebe os eventos."),
+  events: z
+    .array(eventoExternoSchema)
+    .min(1)
+    .max(MAX_EVENTOS_POR_CHAMADA)
+    .describe(
+      "Os eventos, do mais antigo ao mais novo. Cada um: `event` (nome do fato, ex.: page_view), `at` (quando " +
+        "aconteceu, ISO-8601; ausente = agora), `event_id` (id do fato na origem; com ele, reenviar não duplica) e " +
+        "`data` (o JSON do fato).",
+    ),
+};
+
+export const crmAddLeadEvents: McpToolDefinition<typeof addEventsInputShape> = {
+  name: "crm_add_lead_events",
+  description:
+    "Acrescenta fatos de uma integração à linha do tempo de um pedido, em lote. É um REGISTRO QUE SÓ CRESCE: cada " +
+    "evento vira uma linha com a hora em que aconteceu e o JSON que você mandou — uma chamada nunca apaga nem " +
+    "substitui as anteriores (ao contrário de crm_update_lead, que sobrescreve o campo). Use para o que precisa de " +
+    "histórico: cada visita, cada item visto. NÃO muda a etapa (use crm_move_lead_stage) nem os campos do pedido (use " +
+    "crm_update_lead). Até 50 eventos por chamada, 8 KB por evento, 64 KB por chamada, hora do evento de no máximo 30 " +
+    "dias atrás. Mande `event_id` estável em cada evento: se a chamada falhar e você reenviar, os já gravados são " +
+    "contados em `repetidos` e não duplicam; sem `event_id` o reenvio duplica. Cada chamada conta UMA escrita no teto " +
+    "do token, qualquer que seja o tamanho do lote — agrupe os eventos em vez de mandar um por chamada. Pedido de " +
+    "contato marcado como pessoal é recusado.",
+  inputSchema: addEventsInputShape,
+  category: "write",
+  requiresRole: "agent",
+  requiresScope: "mcp:write",
+  handler: async (input, ctx) =>
+    registrarEventosDoNegocio(
+      ctx.supabase,
+      {
+        organizationId: ctx.organizationId,
+        leadId: input.lead_id,
+        actor: ctx.actor,
+        eventos: input.events,
+      },
+      ctx.requestId,
+    ),
+};
 
 // ---------------------------------------------------------------------------
 // retomar como novo negócio (issue #1538)
