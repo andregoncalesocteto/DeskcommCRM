@@ -4,6 +4,9 @@ Para quem tem um cardápio digital (ou qualquer página) num site próprio e que
 item, montou o carrinho, comprou. Você cola um pequeno código no site; o código conta os fatos ao CRM, e o pedido do cliente
 anda pelo funil sozinho.
 
+> O rastreador serve a jornada que **começa no WhatsApp**. Para o pedido que nasce fora dele, ou para o valor definitivo da compra, veja
+> [webhook ou rastreador](webhook-ou-rastreador.md) — inclusive o aviso sobre a mesma compra chegar pelas duas portas.
+
 > Antes de instalar, o funil precisa ter os **eventos cadastrados** (Configurações › Funis › «Para onde o card vai em cada
 > evento»). O rastreador só conta o que o funil cadastrou. Evento não cadastrado é recusado, e a recusa não se reenvia.
 

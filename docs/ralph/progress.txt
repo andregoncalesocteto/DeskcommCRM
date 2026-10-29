@@ -331,3 +331,9 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - O banco local da stack não tem `schema_migrations`: ele é atualizado reaplicando as migrations à mão; conferir `information_schema` antes de culpar o código.
   - NUNCA `pkill -f "...next dev..."` num comando cujo texto (heredoc) cita essa frase: o padrão casa com o próprio shell e o mata. Descobrir o PID pela porta (`ss -ltnp | grep :3100`).
 ---
+
+## 2026-10-29 - US-036 (fecha a etapa 3 e o PRD)
+- `.changes/webhook-de-entrada-valor-e-itens-do-pedido.md` (capacidade_nova); `pnpm release:conferir` sai 0.
+- `docs/integracao/webhook-ou-rastreador.md`: tabela da jornada (começa no WhatsApp → rastreador; nasce fora → webhook; os dois → rastreador na navegação e webhook na compra), configuração do valor e dos itens na fonte, e o aviso de duplicidade: o produto NÃO reconhece a mesma compra nas duas portas (cada uma tem a sua regra de repetição; `order_id` × `external_id`) — rastreador primeiro e webhook depois cria OUTRO card (o reaproveitamento só considera card ABERTO, `status = 'open'`, confirmado no código); webhook primeiro e rastreador depois só registra o evento. Recomendação: UMA porta para a compra por loja. Índice em docs/index.md; o guia do rastreador aponta para ele.
+- Todas as 36 histórias com `passes: true`.
+---
