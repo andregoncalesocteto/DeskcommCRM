@@ -228,3 +228,11 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - `vi.mocked(x).mockClear()` não limpa `mockRejectedValue` de um teste anterior: use `mockReset()` + valor padrão no beforeEach (o teste de uniformidade pegou 500 vs 200 por isso).
 ---
+
+## 2026-10-29 - US-024
+- `lib/tracker/identificar-pedido.ts` (substitui o stub): idtrack = id do contato (UUID, case-insensitive); fora do formato → null sem consultar; contato tem de existir NA ORGANIZAÇÃO DA CHAVE, não ser pessoal nem anonimizado; pedido = `crm_leads` aberto (`status='open'`) mais recente (`created_at` desc) do contato NO FUNIL DA CHAVE; nunca cria pedido. Falha do banco propaga (a porta responde 500 genérico), não vira "não achei".
+- 11 casos (UUID sem pedido, telefone/e-mail/lixo no lugar do id, contato pessoal, anonimizado, outra organização, vários abertos → o mais recente, outro funil, ganho/perdido, sem idtrack, erro do banco). Sabotagem (tirar o filtro de funil): 1 vermelho, como previsto.
+- A porta pública (US-022/023) passa a funcionar de ponta a ponta com este resolvedor real; falta a prova com banco real (US-029).
+- **Learnings for future iterations:**
+  - `contacts` tem is_personal/is_anonymized/is_blocked; `crm_leads` tem status text ('open'|'won'|'lost'), contact_id, last_activity_at, created_at.
+---
