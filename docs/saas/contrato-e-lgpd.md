@@ -23,6 +23,10 @@ vigiada por teste.
    ficam onde a VPS fica. VPS no Brasil deixa o CRM e o banco no Brasil.
 5. Se a IA estiver ligada, avise o cliente **por escrito** que as conversas vão para um
    provedor de IA fora do Brasil.
+6. Se a empresa instalar o **rastreador no site do cardápio**, ela é a controladora do que ele registra: precisa
+   informar isso no aviso de privacidade e, quando a base legal exigir, no banner de consentimento do site. O script
+   não envia telefone, e-mail nem nome (só o `idtrack`, que o CRM já tinha) e guarda no navegador do visitante apenas
+   o `idtrack`, na sessão; o visitante pode optar por sair. Ver [`../integracao/rastreador-do-cardapio.md`](../integracao/rastreador-do-cardapio.md).
 
 ## Cláusulas
 

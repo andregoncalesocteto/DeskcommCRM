@@ -280,3 +280,10 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Chromium reporta resposta CORS bloqueada como requestfailed OU resposta sem ACAO: aceitar as duas.
   - `public/` é lido do disco pelo `next start`: dá para sabotar o script sem rebuild.
 ---
+
+## 2026-10-29 - US-030 (fecha a etapa 2)
+- `.changes/rastreador-no-site-do-cardapio.md` (capacidade_nova); `pnpm release:conferir` sai 0 e lista o fragmento; CHANGELOG intocado.
+- `docs/integracao/rastreador-do-cardapio.md`: criar chave, código, `idtrack`, os cinco eventos com exemplo, comandos (optOut/optIn/storage/debug), travas do navegador (compra só após estado; nada de perda; cancelamento só pelo servidor com token; limite honesto: carrinho+compra forjados fecham o pedido do próprio forjador), privacidade/consentimento (nada de telefone/e-mail/nome; guarda só o idtrack na sessão; optOut grava marcador), tabela de sintomas (inclui o achado do 404 sem CORS após revogar). Índice em docs/index.md.
+- LGPD: `docs/saas/contrato-e-lgpd.md` ganhou o item 6 (empresa que instala o rastreador é controladora, informa no aviso/banner; o script não envia dados pessoais e guarda só o idtrack em sessionStorage). Conferido contra o código do script (chaves removidas) e os testes.
+- Etapa 2 completa (US-020…US-030). Restam a etapa 3 (US-031…036).
+---
