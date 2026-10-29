@@ -316,3 +316,10 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `userEvent.type` trata `[` como sintaxe especial: use `paste` para texto com colchetes.
   - Um envio que FECHA o card (etapa de ganho) tira o card do "aberto": o segundo envio de teste já não reaproveita; reabrir o card via SQL entre as provas.
 ---
+
+## 2026-10-29 - US-034
+- `.business/bellacapri/relatorios-bellacapri.sql` ganhou a coluna `origem` (`whatsapp` | `webhook` | `outros`, de `crm_leads.source`) nas consultas 1 (funil), 2 (conversão por dia), 5 (horário de nascimento), 6 (novos × recorrentes), 7 (compras) e 8 (abandono), com nota no cabeçalho: compare a conversão DENTRO de cada origem. A consulta 1 também deixou de contar o pedido do webhook como "passou por Conversas" (ele nasce adiante). Continua rodando só com `-v org=<id>`.
+- Validado em transação revertida (begin … rollback) no banco local: 2 pedidos `webhook` ganhos + 1 `whatsapp` aberto inseridos; conversão do WhatsApp ficou em 20 % e a do webhook em 100 % em linhas separadas; 0 erros; 0 sobras depois.
+- **Learnings for future iterations:**
+  - Valide SQL de relatório com `( echo begin; echo <inserts>; cat arquivo.sql; echo rollback ) | docker exec -i … psql -v ON_ERROR_STOP=1 -v org=…`.
+---

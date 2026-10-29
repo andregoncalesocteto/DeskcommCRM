@@ -12,6 +12,10 @@
 --   * Dados de TESTE e PRODUÇÃO se misturam até o go-live: filtre por data (and l.created_at >= '...').
 --   * Mover para a MESMA etapa gera um evento stage_changed (from = to). Todas as consultas de transição
 --     ignoram esses eventos (from <> to).
+--   * ORIGEM DO PEDIDO (coluna `origem` nas consultas de funil e de conversão): `whatsapp` = nasceu numa conversa;
+--     `webhook` = nasceu fora do WhatsApp (o webhook de entrada de uma plataforma de cardápio); `outros` = o resto
+--     (manual, importação...). Ela existe porque um pedido que nasce JÁ no checkout não passou por Conversas, e somar
+--     os dois infla "da conversa à compra". Compare a conversão DENTRO de cada origem, nunca entre elas.
 -- =====================================================================================================
 
 \echo ''
@@ -21,28 +25,36 @@ with primeira as (
   select distinct on (pipeline_id) pipeline_id, id as stage_id
   from crm_stages where is_archived = false order by pipeline_id, position
 ),
+pedido as (
+  select l.id, case l.source when 'whatsapp' then 'whatsapp' when 'webhook' then 'webhook' else 'outros' end as origem
+    from crm_leads l where l.organization_id = :'org'
+),
 passou as (
   select a.lead_id, (a.payload->>'to_stage_id')::uuid as stage_id
     from crm_lead_activities a where a.type = 'stage_changed' and a.organization_id = :'org'
   union select l.id, l.stage_id from crm_leads l where l.organization_id = :'org'
+  -- Conversas só conta quem NASCEU numa conversa: o pedido que o webhook cria já nasce adiante (no checkout, por exemplo).
   union select l.id, p.stage_id from crm_leads l join primeira p on p.pipeline_id = l.pipeline_id
-   where l.organization_id = :'org'
+   where l.organization_id = :'org' and l.source is distinct from 'webhook'
 )
 select s.name as etapa,
+       coalesce(o.origem, '(nenhum pedido)') as origem,
        count(distinct p.lead_id) as pedidos_que_chegaram,
        round(100.0 * count(distinct p.lead_id)
-             / nullif((select count(*) from crm_leads where organization_id = :'org'), 0), 1) as pct_das_conversas
+             / nullif((select count(*) from pedido x where x.origem = o.origem), 0), 1) as pct_dos_pedidos_da_origem
   from crm_stages s
   left join passou p on p.stage_id = s.id
+  left join pedido o on o.id = p.lead_id
  where s.is_archived = false
    and s.pipeline_id in (select pipeline_id from crm_leads where organization_id = :'org')
- group by s.name, s.position
- order by s.position;
+ group by s.name, s.position, o.origem
+ order by s.position, o.origem;
 
 \echo ''
 \echo '=== 2. Taxa de conversão conversa -> compra, por dia de nascimento do pedido ==='
 -- conversao_pct = compras / conversas. A segunda taxa ignora pedidos ainda abertos (coorte imatura).
 select (l.created_at at time zone 'America/Sao_Paulo')::date as dia,
+       case l.source when 'whatsapp' then 'whatsapp' when 'webhook' then 'webhook' else 'outros' end as origem,
        count(*)                                                    as conversas_iniciadas,
        count(*) filter (where l.status = 'won')                    as compras,
        count(*) filter (where l.status = 'lost')                   as canceladas,
@@ -52,7 +64,7 @@ select (l.created_at at time zone 'America/Sao_Paulo')::date as dia,
              / nullif(count(*) filter (where l.status <> 'open'), 0), 1)                as conversao_dos_encerrados_pct
   from crm_leads l
  where l.organization_id = :'org'
- group by 1 order by 1;
+ group by 1, 2 order by 1, 2;
 
 \echo ''
 \echo '=== 3. Tempo entre etapas (só avanços, entre eventos consecutivos do mesmo pedido) ==='
@@ -96,10 +108,11 @@ select extract(dow  from a.created_at at time zone 'America/Sao_Paulo')::int as 
 \echo '=== 5. Quando as conversas começam: pedidos nascidos por dia da semana e hora ==='
 select extract(dow  from l.created_at at time zone 'America/Sao_Paulo')::int as dia_da_semana,
        extract(hour from l.created_at at time zone 'America/Sao_Paulo')::int as hora,
+       case l.source when 'whatsapp' then 'whatsapp' when 'webhook' then 'webhook' else 'outros' end as origem,
        count(*) as conversas_iniciadas
   from crm_leads l
  where l.organization_id = :'org'
- group by 1, 2 order by 1, 2;
+ group by 1, 2, 3 order by 1, 2, 3;
 
 \echo ''
 \echo '=== 6. Clientes novos x recorrentes: conversão por tipo ==='
@@ -109,17 +122,19 @@ select case when exists (
           where p.organization_id = l.organization_id and p.contact_id = l.contact_id
             and p.status = 'won' and p.created_at < l.created_at
        ) then 'recorrente' else 'novo' end as tipo_de_cliente,
+       case l.source when 'whatsapp' then 'whatsapp' when 'webhook' then 'webhook' else 'outros' end as origem,
        count(*) as conversas,
        count(*) filter (where l.status = 'won') as compras,
        round(100.0 * count(*) filter (where l.status = 'won') / nullif(count(*), 0), 1) as conversao_pct
   from crm_leads l
  where l.organization_id = :'org'
- group by 1 order by 1;
+ group by 1, 2 order by 1, 2;
 
 \echo ''
 \echo '=== 7. Compras: receita, ticket médio, por forma de pagamento, entrega e cupom ==='
 -- value_cents e custom_fields só existem se o cardápio os enviou (crm_update_lead).
-select coalesce(l.custom_fields->>'forma_pagamento', '(não informado)') as forma_pagamento,
+select case l.source when 'whatsapp' then 'whatsapp' when 'webhook' then 'webhook' else 'outros' end as origem,
+       coalesce(l.custom_fields->>'forma_pagamento', '(não informado)') as forma_pagamento,
        coalesce(l.custom_fields->>'tipo_entrega',    '(não informado)') as tipo_entrega,
        (l.custom_fields->>'cupom' is not null)                           as usou_cupom,
        count(*)                                                         as compras,
@@ -127,7 +142,7 @@ select coalesce(l.custom_fields->>'forma_pagamento', '(não informado)') as form
        round(avg(l.value_cents) / 100.0, 2)                             as ticket_medio_brl
   from crm_leads l
  where l.organization_id = :'org' and l.status = 'won'
- group by 1, 2, 3 order by compras desc;
+ group by 1, 2, 3, 4 order by origem, compras desc;
 
 \echo ''
 \echo '=== 8. Abandono: dos pedidos que chegaram a cada etapa, quantos NÃO compraram ==='
@@ -138,11 +153,12 @@ with chegou as (
    where a.type = 'stage_changed' and a.organization_id = :'org' and s.name in ('Carrinho', 'Revisão')
 )
 select c.etapa as chegou_a,   -- quem chegou a Revisão também aparece em Carrinho
+       case l.source when 'whatsapp' then 'whatsapp' when 'webhook' then 'webhook' else 'outros' end as origem,
        count(*) filter (where l.status = 'won')  as compraram,
        count(*) filter (where l.status <> 'won') as nao_compraram,
        round(100.0 * count(*) filter (where l.status <> 'won') / nullif(count(*), 0), 1) as abandono_pct
   from chegou c join crm_leads l on l.id = c.lead_id
- group by c.etapa order by c.etapa;
+ group by c.etapa, 2 order by c.etapa, 2;
 
 -- =====================================================================================================
 -- Consultas sobre os REGISTROS do cardápio (crm_add_lead_events) e o JSON de estado (custom_fields)
