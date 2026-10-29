@@ -18442,6 +18442,7 @@ export const DICIONARIO: Traducoes = {
   "Nome da chave": { es: "Nombre de la clave" },
   "Cardápio digital": { es: "Menú digital" },
   "Sites onde o código vai rodar (um por linha)": { es: "Sitios donde correrá el código (uno por línea)" },
+  "já é um campo da ficha deste funil: escolha outro nome para guardar o JSON do pedido.": { es: "ya es un campo de la ficha de este embudo: elige otro nombre para guardar el JSON del pedido." },
 };
 
 /**

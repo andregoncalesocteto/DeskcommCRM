@@ -612,3 +612,85 @@ describe("valor da venda no envio (value_path + value_unit)", () => {
     expect(h.atualizarLead.mock.calls.at(-1)?.[3]).toMatchObject({ value_cents: 8000 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Etapa 3 de "Eventos do funil": o conteúdo aninhado do envio guardado como JSON (payload_state_key).
+// ---------------------------------------------------------------------------
+
+describe("JSON do pedido no envio (payload_state_key)", () => {
+  const COM_JSON = { reuse_open_lead_on_capture: false, payload_state_key: "pedido_json" };
+  const ITENS = [{ item_id: "p1", item_name: "Pizza", quantity: 2 }];
+  const avisos = () =>
+    (logger.warn as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes("JSON do pedido"));
+  const camposDaCriacao = () => (h.criarLead.mock.calls[0]?.[2] as { custom_fields: Record<string, unknown> }).custom_fields;
+
+  beforeEach(() => {
+    vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+  });
+
+  it("⭐ SEM a configuração, o aninhado continua descartado (o comportamento de hoje não muda)", async () => {
+    m.fonte = { ...FONTE, reuse_open_lead_on_capture: false };
+    await enviar({ ...ENVIO_DO_TRIAL, itens: ITENS, cliente: { cidade: "Rio Preto" } });
+    expect(JSON.stringify(camposDaCriacao())).not.toContain("Pizza");
+    expect(camposDaCriacao()).not.toHaveProperty("pedido_json");
+  });
+
+  it("⭐ objeto e lista do corpo ficam JUNTOS na chave configurada, do jeito que vieram", async () => {
+    m.fonte = { ...FONTE, ...COM_JSON };
+    const res = await enviar({ ...ENVIO_DO_TRIAL, itens: ITENS, cliente: { cidade: "Rio Preto" } });
+    expect(res.status).toBe(200);
+    expect(camposDaCriacao().pedido_json).toEqual({ itens: ITENS, cliente: { cidade: "Rio Preto" } });
+    expect(camposDaCriacao().evento).toBe("trial_iniciado");
+    expect(avisos()).toHaveLength(0);
+  });
+
+  it("corpo sem aninhado: nada é gravado na chave", async () => {
+    m.fonte = { ...FONTE, ...COM_JSON };
+    await enviar(ENVIO_DO_TRIAL);
+    expect(camposDaCriacao()).not.toHaveProperty("pedido_json");
+  });
+
+  it("⭐ acima do limite: o card é criado SEM o JSON e o motivo vai para o log", async () => {
+    m.fonte = { ...FONTE, ...COM_JSON };
+    const res = await enviar({ ...ENVIO_DO_TRIAL, itens: [{ texto: "x".repeat(40_000) }] });
+    expect(res.status).toBe(200);
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect(camposDaCriacao()).not.toHaveProperty("pedido_json");
+    expect(avisos()).toHaveLength(1);
+    expect(avisos()[0]![1]).toMatchObject({ webhook_source_id: "fonte-1", limite: 32768 });
+  });
+
+  it("⭐ chave que COINCIDE com um campo do próprio envio não sobrescreve o campo: JSON não guardado, aviso no log", async () => {
+    m.fonte = { ...FONTE, reuse_open_lead_on_capture: false, payload_state_key: "evento" };
+    await enviar({ ...ENVIO_DO_TRIAL, itens: ITENS });
+    expect(camposDaCriacao().evento).toBe("trial_iniciado");
+    expect(avisos()).toHaveLength(1);
+  });
+
+  it("⭐ reenvio do mesmo id: JSON IGUAL não atualiza o card; JSON novo atualiza com o objeto inteiro", async () => {
+    m.fonte = { ...FONTE, ...COM_JSON, update_existing_lead_on_capture: true };
+    m.porExternalId = {
+      ...CARD_ABERTO, source: "webhook", external_id: "conta-3357", webhook_source_id: "fonte-1",
+      custom_fields: { evento: "trial_iniciado", pedido_json: { itens: ITENS } },
+    };
+    const igual = await enviar({ ...ENVIO_DO_TRIAL, itens: ITENS });
+    expect(igual.status).toBe(200);
+    expect(h.atualizarLead).not.toHaveBeenCalled();
+    expect(desfecho()).toBe("duplicado");
+
+    const novo = await enviar({ ...ENVIO_DO_TRIAL, itens: [...ITENS, { item_id: "p2", quantity: 1 }] });
+    expect(novo.status).toBe(200);
+    const patch = h.atualizarLead.mock.calls.at(-1)?.[3] as { custom_fields: Record<string, unknown> };
+    expect(patch.custom_fields.pedido_json).toEqual({ itens: [...ITENS, { item_id: "p2", quantity: 1 }] });
+  });
+
+  it("card aberto reaproveitado também recebe o JSON", async () => {
+    m.fonte = { ...FONTE, payload_state_key: "pedido_json" };
+    await enviar({ ...ENVIO_DO_TRIAL, itens: ITENS });
+    expect(h.criarLead).not.toHaveBeenCalled();
+    const patch = h.atualizarLead.mock.calls.find((c) => (c[3] as { custom_fields?: Record<string, unknown> }).custom_fields?.pedido_json)?.[3] as {
+      custom_fields: Record<string, unknown>;
+    };
+    expect(patch.custom_fields.pedido_json).toEqual({ itens: ITENS });
+  });
+});

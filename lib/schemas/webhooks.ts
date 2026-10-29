@@ -628,6 +628,14 @@ export const updateWebhookSourceSchema = createWebhookSourceSchema.partial().ext
    */
   value_path: z.string().max(200).regex(FORMA_DO_CAMINHO, "Use só nomes de campo separados por ponto, como pedido.total.").nullish(),
   value_unit: z.enum(["reais", "centavos"]).nullish(),
+  /**
+   * A chave de `custom_fields` onde o conteúdo aninhado do envio (lista de itens, objetos) é guardado como JSON, em vez de
+   * descartado. `null` limpa. A rota do PATCH recusa chave igual a um campo declarado do funil da fonte.
+   */
+  payload_state_key: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/, "A chave usa minúsculas, números e _, começa por letra e tem até 64 caracteres.")
+    .nullish(),
 }).refine((f) => f.value_path === undefined && f.value_unit === undefined || (f.value_path == null) === (f.value_unit == null), {
   message: "Informe o campo do valor e a unidade juntos, ou nenhum dos dois.",
   path: ["value_path"],

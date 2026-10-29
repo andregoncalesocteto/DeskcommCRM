@@ -13939,6 +13939,7 @@ export type Database = {
           name: string;
           organization_id: string;
           path_token: string;
+          payload_state_key: string | null;
           redirect_to: string | null;
           reuse_open_lead_on_capture: boolean;
           secret_encrypted: string | null;
@@ -13965,6 +13966,7 @@ export type Database = {
           name: string;
           organization_id: string;
           path_token: string;
+          payload_state_key?: string | null;
           redirect_to?: string | null;
           reuse_open_lead_on_capture?: boolean;
           secret_encrypted?: string | null;
@@ -13990,6 +13992,7 @@ export type Database = {
           name?: string;
           organization_id?: string;
           path_token?: string;
+          payload_state_key?: string | null;
           redirect_to?: string | null;
           reuse_open_lead_on_capture?: boolean;
           secret_encrypted?: string | null;

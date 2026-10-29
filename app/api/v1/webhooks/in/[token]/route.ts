@@ -23,6 +23,7 @@ import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { classificarLeadInicial, type ResultadoClassificacaoInicial } from "@/lib/leads/classificacao-inicial";
 import type { CreateLeadInput } from "@/lib/schemas";
 import { valorDoEnvio } from "@/lib/webhooks/valor-do-envio";
+import { jsonDoEnvio, jsonMudou, LIMITE_DO_JSON_EM_BYTES } from "@/lib/webhooks/json-do-envio";
 import { mapInboundPayload, extrairAtribuicaoDoInbound, verifyInboundSignature, type FieldMap } from "@/lib/webhooks/inbound";
 import { HEADER_ASSINATURA_DE_ENTRADA } from "@/lib/webhooks/assinatura";
 import { encontrarContatoPorTelefoneComNome } from "@/lib/channels/contato-por-telefone";
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const admin = createAdminClient();
   const { data: source, error: srcErr } = await admin
     .from("webhook_sources")
-    .select("id, name, organization_id, secret_encrypted, default_pipeline_id, default_stage_id, field_map, form_fields, redirect_to, is_active, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture, value_path, value_unit")
+    .select("id, name, organization_id, secret_encrypted, default_pipeline_id, default_stage_id, field_map, form_fields, redirect_to, is_active, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture, value_path, value_unit, payload_state_key")
     .eq("path_token", token)
     .maybeSingle();
   if (srcErr) return fail("internal_error", srcErr.message, 500, { requestId });
@@ -511,6 +512,26 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   }
   const valorCents = valorLido.tipo === "valor" ? valorLido.centavos : null;
 
+  // O JSON do pedido (a lista de itens e os objetos do corpo), guardado numa chave de `custom_fields` quando a fonte pede.
+  // Fora do `mapped.custom_fields` de propósito: `camposQueMudaram` compara com `String()`, que num objeto é sempre
+  // «[object Object]» — a comparação do JSON é própria (`jsonMudou`).
+  const jsonLido = jsonDoEnvio(payload, source.payload_state_key);
+  if (jsonLido.tipo === "grande") {
+    logger.warn("[webhooks.in] JSON do pedido grande demais, não guardado", {
+      webhook_source_id: source.id,
+      bytes: jsonLido.bytes,
+      limite: LIMITE_DO_JSON_EM_BYTES,
+    });
+  }
+  if (jsonLido.tipo === "conteudo" && jsonLido.chave in mapped.custom_fields) {
+    logger.warn("[webhooks.in] JSON do pedido não guardado: a chave já é um campo deste envio", {
+      webhook_source_id: source.id,
+      chave: jsonLido.chave,
+    });
+  }
+  const jsonDoPedido =
+    jsonLido.tipo === "conteudo" && !(jsonLido.chave in mapped.custom_fields) ? jsonLido : null;
+
   /**
    * O fecho de um reenvio: o `external_id` já aponta para um card (#2316).
    *
@@ -603,6 +624,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     // Mesmo envio repetido: nada é recriado — a ferramenta que reenviou recebe
     // sucesso e para de tentar.
     const valorMudou = valorCents !== null && valorCents !== lead.valueCents;
+    if (jsonDoPedido && jsonMudou(lead.customFields[jsonDoPedido.chave], jsonDoPedido.valor)) {
+      campos[jsonDoPedido.chave] = jsonDoPedido.valor;
+    }
     if (Object.keys(campos).length === 0 && !tituloMudou && !valorMudou && etapaAlvo === null) {
       return fecharComoReenvio();
     }
@@ -1051,6 +1075,9 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     };
     try {
       const valorMudou = valorCents !== null && valorCents !== (cardAberto.value_cents ?? null);
+      if (jsonDoPedido && jsonMudou(cardAberto.custom_fields[jsonDoPedido.chave], jsonDoPedido.valor)) {
+        campos[jsonDoPedido.chave] = jsonDoPedido.valor;
+      }
       if (Object.keys(campos).length > 0 || tituloMudou || valorMudou) {
         await updateLeadHandler(admin, ctxDoCard, cardAberto.id, {
           ...(tituloMudou && mapped.name ? { title: mapped.name } : {}),
@@ -1101,7 +1128,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     contact_id: contactId,
     tags: [],
     source: "webhook",
-    custom_fields: mapped.custom_fields,
+    custom_fields: jsonDoPedido ? { ...mapped.custom_fields, [jsonDoPedido.chave]: jsonDoPedido.valor } : mapped.custom_fields,
     ...(valorCents !== null ? { value_cents: valorCents } : {}),
     source_metadata: { ...mapped.source_metadata, webhook_source_id: source.id },
     // A coluna que responde "de quem é este card" para a atualização por

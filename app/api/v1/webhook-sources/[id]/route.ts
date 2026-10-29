@@ -68,12 +68,35 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   const supabase = await createClient();
   const { data: existing, error: fetchErr } = await supabase
     .from("webhook_sources")
-    .select("id, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture, secret_encrypted")
+    .select("id, default_pipeline_id, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture, secret_encrypted")
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
   if (fetchErr) return fail("internal_error", fetchErr.message, 500, { requestId });
   if (!existing) return fail("not_found", t("Fonte não encontrada."), 404, { requestId });
+
+  // A chave onde o JSON do pedido é guardado não pode ser um campo declarado do funil da fonte: o campo tem tipo e régua
+  // próprios, e um objeto ali seria recusado (ou, pior, sobrescreveria o que a equipe preencheu).
+  if (parsed.data.payload_state_key) {
+    const funilId = parsed.data.default_pipeline_id ?? (existing as { default_pipeline_id: string }).default_pipeline_id;
+    const { data: funil, error: erroFunil } = await supabase
+      .from("crm_pipelines")
+      .select("settings")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("id", funilId)
+      .maybeSingle();
+    if (erroFunil) return fail("internal_error", erroFunil.message, 500, { requestId });
+    const declarados = (funil as { settings?: { fields?: Array<{ key?: string }> } } | null)?.settings?.fields ?? [];
+    if (declarados.some((c) => c.key === parsed.data.payload_state_key)) {
+      // A frase é fixa (é ela que `t()` traduz); a chave entra antes, fora do `t()`.
+      return fail(
+        "validation_failed",
+        `«${parsed.data.payload_state_key}» ${t("já é um campo da ficha deste funil: escolha outro nome para guardar o JSON do pedido.")}`,
+        422,
+        { requestId },
+      );
+    }
+  }
 
   // As opções que dependem de prova de origem (#2316, #3101) recusam pelo mesmo
   // lugar — e cada uma com a própria frase: uma mensagem só para todas faria

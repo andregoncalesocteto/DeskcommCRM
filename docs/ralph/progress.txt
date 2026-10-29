@@ -298,3 +298,11 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `webhook_sources.kind` só aceita 'lead_capture'; `path_token` é NOT NULL sem default.
   - Próximo NNNN livre: 9043.
 ---
+
+## 2026-10-29 - US-032
+- Migration `20261029211000_9043_fonte_de_webhook_json_do_pedido.sql` + baseline: `webhook_sources.payload_state_key` (nula; formato dos eventos `^[a-z][a-z0-9_]{0,63}$`). Invariante estendido (7 casos no arquivo); test:db verde.
+- `lib/webhooks/json-do-envio.ts`: o aninhado = chaves de PRIMEIRO nível do corpo cujo valor é objeto/lista (exceto `external_id` e `stage`), guardado JUNTO sob a chave; teto de 32 KB medido em BYTES (acento pesa 2): acima disso não guarda e `logger.warn`. `jsonMudou` compara JSON.stringify (o `camposQueMudaram` da rota usa `String()`, que num objeto é «[object Object]» — por isso o JSON NÃO entra em `mapped.custom_fields`).
+- Rota: criação grava `{...custom_fields, [chave]: json}`; reenvio/reuso só atualizam se o JSON mudou. Sem a configuração, o aninhado segue descartado. Chave que coincide com campo do PRÓPRIO envio não sobrescreve (aviso). PATCH da fonte recusa (422) chave igual a campo declarado do funil — usando o funil NOVO quando o mesmo PATCH o troca.
+- Lacuna declarada: se um campo com essa chave for declarado no funil DEPOIS de configurar a fonte, nada impede (a checagem é só no PATCH da fonte). A régua de campos pode recusar o objeto; o envio do reenvio já tolera a recusa (log).
+- Testes: rota in 7 novos (31 no arquivo), PATCH da fonte 10, lib 7. Sabotagens: sem a guarda de coincidência → 1 vermelho (previsto 1); sem a checagem de campo declarado → 2 (previsto 2).
+---

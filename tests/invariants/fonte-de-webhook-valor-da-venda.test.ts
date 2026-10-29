@@ -61,3 +61,20 @@ describe("webhook_sources.value_path / value_unit", () => {
     expect(recusa(inserir(`, value_path, value_unit|, '${"a".repeat(201)}', 'reais'`))).toContain("webhook_sources_caminho_do_valor");
   });
 });
+
+describe("webhook_sources.payload_state_key (migration 9043)", () => {
+  it("controle: a coluna existe e nasce nula", () => {
+    expect(columnExists("webhook_sources", "payload_state_key")).toBe(true);
+    sql(inserir(""));
+    expect(sql(`select payload_state_key is null from public.webhook_sources where id = '${FONTE}';`)).toBe("t");
+    sql(`delete from public.webhook_sources where id = '${FONTE}';`);
+  });
+
+  it("aceita chave no formato dos eventos e recusa o resto (maiúscula, hífen, número no começo, 65 caracteres)", () => {
+    sql(inserir(", payload_state_key|, 'pedido_json'"));
+    sql(`delete from public.webhook_sources where id = '${FONTE}';`);
+    for (const ruim of ["Pedido", "pedido-json", "1pedido", "a".repeat(65), ""]) {
+      expect(recusa(inserir(`, payload_state_key|, '${ruim}'`)), ruim).toContain("webhook_sources_chave_do_json");
+    }
+  });
+});
