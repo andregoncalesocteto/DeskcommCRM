@@ -111,6 +111,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
           actor: { type: "webhook_source", id: chave.id },
           eventos: corpo.events,
           origem: "navegador",
+          chaveId: chave.id,
         },
         requestId,
       );

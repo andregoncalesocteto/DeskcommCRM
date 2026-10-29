@@ -41,11 +41,22 @@ const chave = (id: string, extra: Linha = {}): Linha => ({
   is_active: true, revoked_at: null, created_at: `2026-10-0${id.length}T10:00:00Z`, ...extra,
 });
 
+const agora = Date.now();
+const iso = (diasAtras: number) => new Date(agora - diasAtras * 86_400_000).toISOString();
+const atividade = (chaveId: string, diasAtras: number, extra: Linha = {}): Linha => ({
+  organization_id: ORG, type: "external_event", performed_at: iso(diasAtras), payload: { event: "page_view", chave_id: chaveId },
+  lead: { pipeline_id: FUNIL }, ...extra,
+});
+
 function tabelas() {
   return {
     crm_pipelines: [
       { id: FUNIL, organization_id: ORG },
       { id: FUNIL_ALHEIO, organization_id: OUTRA_ORG },
+    ] as Linha[],
+    crm_leads: [{ id: "lead-1", organization_id: ORG, pipeline_id: FUNIL }] as Linha[],
+    crm_lead_activities: [
+      atividade("a", 2), atividade("a", 3), atividade("a", 20), atividade("b", 1, { type: "lead_edited" }),
     ] as Linha[],
     crm_tracker_public_keys: [
       chave("a", { created_at: "2026-10-01T10:00:00Z" }),
@@ -89,6 +100,19 @@ describe("GET /pipelines/[id]/tracker-keys", () => {
     expect(r.status).toBe(200);
     const { data } = await r.json();
     expect(data.chaves.map((c: { id: string }) => c.id)).toEqual(["b", "a"]);
+  });
+
+  it("⭐ cada chave traz o uso: último recebimento e quantos nos últimos 7 dias (só os dela, só do tipo evento externo)", async () => {
+    // chave "a": 3 linhas (2, 3 e 20 dias atrás); chave "b": só uma linha de OUTRO tipo, que não conta.
+    const t = tabelas();
+    t.crm_tracker_public_keys[0]!.id = "a";
+    t.crm_tracker_public_keys[1]!.id = "b";
+    banco(t);
+    const { data } = await (await GET(get(), ctx)).json();
+    const porId = Object.fromEntries(data.chaves.map((c: Linha) => [c.id as string, c]));
+    expect(porId.a.recebidos_7_dias).toBe(2);
+    expect(Date.parse(porId.a.ultimo_recebimento)).toBe(Date.parse(iso(2)));
+    expect(porId.b).toMatchObject({ ultimo_recebimento: null, recebidos_7_dias: 0 });
   });
 
   it("devolve a chave pública inteira (não é segredo)", async () => {

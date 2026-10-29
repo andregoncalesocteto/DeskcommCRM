@@ -20,6 +20,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { funilDaOrganizacao } from "@/lib/leads/eventos-do-funil/cadastro";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarOrigens, novaChaveSchema } from "@/lib/tracker/origens";
+import { COLUNAS_DA_CHAVE, lerChavesComUso } from "@/lib/tracker/uso";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
-const COLUNAS = "id, pipeline_id, public_key, label, allowed_origins, is_active, revoked_at, created_at";
+const COLUNAS = COLUNAS_DA_CHAVE;
 
 export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
@@ -41,14 +42,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     if (!(await funilDaOrganizacao(supabase, authz.org.orgId, pipelineId))) {
       return fail("not_found", t("Funil não encontrado."), 404, { requestId });
     }
-    const { data, error } = await supabase
-      .from("crm_tracker_public_keys")
-      .select(COLUNAS)
-      .eq("organization_id", authz.org.orgId)
-      .eq("pipeline_id", pipelineId)
-      .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
-    return ok({ chaves: data ?? [] }, { requestId });
+    return ok({ chaves: await lerChavesComUso(supabase, authz.org.orgId, pipelineId) }, { requestId });
   } catch (err) {
     return fail("internal_error", (err as Error).message, 500, { requestId });
   }

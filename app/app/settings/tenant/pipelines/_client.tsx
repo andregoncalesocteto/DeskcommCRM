@@ -52,6 +52,7 @@ import { CaretDown, Plus, Trash } from "@/lib/ui/icons";
 import { entradaDoInboxDeclarada } from "@/lib/leads/entrada-do-inbox";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
 import { EventosDoFunilSection } from "./_eventos";
+import { RastreadorSection } from "./_rastreador";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
 
 /** As chaves dos campos declarados da ficha (`settings.fields`): o "guardar em" de um evento não pode repeti-las. */
@@ -413,6 +414,9 @@ function CardDoFunil({
           pipelineId={pipeline.id}
           camposDaFicha={chavesDosCamposDaFicha(pipeline.settings)}
         />
+      </div>
+      <div className="border-t border-border pt-6">
+        <RastreadorSection pipelineId={pipeline.id} />
       </div>
       {podeEditarConfig && (
         <div className="space-y-4 border-t border-border pt-6">

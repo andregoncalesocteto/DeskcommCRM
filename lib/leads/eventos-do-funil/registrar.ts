@@ -131,6 +131,8 @@ export interface RegistrarEventosDoFunilInput {
    * travas de confiança — o navegador é do visitante, não nosso — e é gravado no histórico como `payload.origem`.
    */
   origem?: "navegador";
+  /** A chave pública do rastreador que trouxe o evento (só na porta pública): gravada em `payload.chave_id` para o uso da chave. */
+  chaveId?: string;
   /** Só para o teste. Em produção é a hora do servidor. */
   agora?: Date;
 }
@@ -322,6 +324,7 @@ export async function registrarEventosDoFunil(
           at: c.quando,
           event_id: evento.event_id,
           ...(input.origem ? { origem: input.origem } : {}),
+          ...(input.chaveId ? { chave_id: input.chaveId } : {}),
           ...(evento.data ? { data: evento.data } : {}),
         },
       }),

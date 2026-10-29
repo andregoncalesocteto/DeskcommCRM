@@ -37,6 +37,9 @@ vi.mock("./_mapping", () => ({
 vi.mock("./_eventos", () => ({
   EventosDoFunilSection: () => null,
 }));
+vi.mock("./_rastreador", () => ({
+  RastreadorSection: () => null,
+}));
 
 // Polyfills que o Radix Select exige e o jsdom não tem.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();

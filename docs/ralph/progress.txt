@@ -257,3 +257,16 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - ESLint reclama de `catch (e)` sem uso e NÃO aceita `_e` em catch: usar `catch {` (binding opcional).
   - Testar script de navegador: `new Function("window", FONTE)(windowFalsa)` + relógio falso do vitest; o arquivo precisa terminar em `})(window);`.
 ---
+
+## 2026-10-29 - US-028
+- Seção de tela (sem tela nova, sem entrada de navegação): `app/app/settings/tenant/pipelines/_rastreador.tsx` + `hooks/pipelines/useChavesDoRastreador.ts`, montada em `_client.tsx` abaixo dos eventos. Cria chave (nome + sites, um por linha, validados com a MESMA regra da API via `lib/tracker/origens`), lista (valor, sites, Ativa/Revogada, uso), copia/mostra o código de instalação, revoga com confirmação. Texto leigo: a chave pública não é uma senha, só envia eventos dos sites cadastrados, não lê nada do CRM; o cancelamento não passa por ali.
+- Servidor: o histórico passou a gravar `payload.chave_id` (a porta passa `chaveId` ao registrador) e `GET /tracker-keys` devolve `ultimo_recebimento` e `recebidos_7_dias` por chave (`lib/tracker/uso.ts`) — é o "mostra se a chave já recebeu evento".
+- Código de instalação = trecho que enfileira chamadas em `w.deskcomm.q` e carrega `<CRM>/deskcomm-rastreador.js` async, com `endpoint` explícito.
+- Testes: 20 do componente (+ 1 de rota). Sabotagem (tirar a validação antes do envio): 4 vermelhos (previsto 4). 30 traduções es novas; gates i18n/data/tailwind verdes.
+- Verificado NO NAVEGADOR real (nota em evidence/eventos-do-funil/verificacao-no-navegador-us028.md): criar/recusar site, código colado numa página em OUTRA origem (localhost:8099) moveu o pedido a Visitas, gravou origem=navegador e removeu o `phone`; preflight 204 vs 403; uso na tela; revogar parou o código na hora. Sobras 0. Migration 9041 aplicada no banco local da stack (idempotente).
+- ACHADO: 404 de chave revogada não tem CORS -> o navegador vê erro de rede e o script tenta até 5 vezes antes de desistir (inofensivo). Documentar na US-030.
+- **Learnings for future iterations:**
+  - Antes de dirigir a tela contra o banco local da stack, aplicar a migration nova nele (`docker exec -i supabase_db_deskcomm-crm psql -U postgres -v ON_ERROR_STOP=1 < supabase/migrations/<arquivo>.sql`); sem ela a leitura dá 500.
+  - `userEvent.setup()` instala o próprio dublê de `navigator.clipboard`: defina o seu DEPOIS do setup.
+  - Script de dev-browser tem 30 s: a primeira compilação do `next dev` estoura; faça um curl de aquecimento antes.
+---
