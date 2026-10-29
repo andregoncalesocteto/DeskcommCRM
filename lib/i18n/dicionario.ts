@@ -18443,6 +18443,18 @@ export const DICIONARIO: Traducoes = {
   "Cardápio digital": { es: "Menú digital" },
   "Sites onde o código vai rodar (um por linha)": { es: "Sitios donde correrá el código (uno por línea)" },
   "já é um campo da ficha deste funil: escolha outro nome para guardar o JSON do pedido.": { es: "ya es un campo de la ficha de este embudo: elige otro nombre para guardar el JSON del pedido." },
+  // Fonte do webhook de entrada: valor e itens do pedido.
+  "Valor e itens do pedido": { es: "Valor e ítems del pedido" },
+  "Se quem envia (um cardápio, uma loja) manda o total do pedido, diga em qual campo ele vem: o CRM preenche o valor do card com ele. Os itens do pedido, que chegam como lista, ficam guardados na ficha do card se você escolher onde.": { es: "Si quien envía (un menú, una tienda) manda el total del pedido, indica en qué campo viene: el CRM completa el valor de la tarjeta con él. Los ítems del pedido, que llegan como lista, quedan guardados en la ficha de la tarjeta si eliges dónde." },
+  "Campo do valor do pedido": { es: "Campo del valor del pedido" },
+  "Como aparece no envio: value, ou pedido.total quando está dentro de outro bloco. Deixe vazio para não preencher o valor.": { es: "Como aparece en el envío: value, o pedido.total cuando está dentro de otro bloque. Déjalo vacío para no completar el valor." },
+  "Guardar os itens e os demais dados aninhados em": { es: "Guardar los ítems y los demás datos anidados en" },
+  "Opcional. Listas e blocos que o outro sistema manda (os itens, os dados do cliente) ficam guardados aqui, como estão. Sem isto, só os campos simples são aproveitados. Não pode ter o mesmo nome de um campo da ficha do funil.": { es: "Opcional. Las listas y bloques que envía el otro sistema (los ítems, los datos del cliente) quedan guardados aquí, tal como están. Sin esto, solo se aprovechan los campos simples. No puede tener el mismo nombre que un campo de la ficha del embudo." },
+  "Salvar valor e itens": { es: "Guardar valor e ítems" },
+  "A etapa padrão desta fonte": { es: "La etapa predeterminada de esta fuente" },
+  "fecha a venda, mas nenhum campo do valor foi configurado: os cards chegam ganhos sem valor e a venda não é enviada como conversão.": { es: "cierra la venta, pero no se configuró ningún campo de valor: las tarjetas llegan ganadas sin valor y la venta no se envía como conversión." },
+  "Todo envio desta fonte leva o card para a etapa": { es: "Todo envío de esta fuente lleva la tarjeta a la etapa" },
+  "Para o pedido andar por várias etapas conforme o que o cliente faz, use os eventos do funil.": { es: "Para que el pedido avance por varias etapas según lo que hace el cliente, usa los eventos del embudo." },
 };
 
 /**

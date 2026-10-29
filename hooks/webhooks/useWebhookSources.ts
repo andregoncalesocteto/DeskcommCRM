@@ -16,6 +16,12 @@ export interface WebhookSourceRow {
   update_existing_lead_on_capture: boolean;
   /** Opção do #3101: reusar o card aberto do contato no funil da fonte. */
   reuse_open_lead_on_capture: boolean;
+  /** Onde, no corpo do envio, está o valor da venda; `null` = a fonte não preenche o valor do card. */
+  value_path: string | null;
+  /** Reais ou centavos; vem junto de `value_path`. */
+  value_unit: "reais" | "centavos" | null;
+  /** A chave do card onde o conteúdo aninhado do envio é guardado como JSON; `null` = descartado. */
+  payload_state_key: string | null;
   kind: string;
   last_received_at: string | null;
   default_pipeline_id: string;
@@ -100,6 +106,11 @@ export function useUpdateWebhookSource() {
       update_existing_lead_on_capture?: boolean;
       /** A opção do #3101 — reusar o card aberto do contato no funil da fonte. */
       reuse_open_lead_on_capture?: boolean;
+      /** O campo do valor da venda e a unidade (vão juntos); `null` limpa. */
+      value_path?: string | null;
+      value_unit?: "reais" | "centavos" | null;
+      /** Onde guardar o JSON do pedido; `null` limpa. */
+      payload_state_key?: string | null;
       secret?: string | null;
       form_fields?: WebhookFormField[];
     }) => apiClient.patch<{ data: WebhookSourceRow }>(`/api/v1/webhook-sources/${id}`, patch),

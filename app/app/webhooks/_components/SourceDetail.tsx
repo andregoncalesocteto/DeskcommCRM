@@ -1,5 +1,6 @@
 "use client";
 
+import { ValorEJsonDaFonte } from "./ValorEJsonDaFonte";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
@@ -447,6 +448,8 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
               {t("Configure a assinatura da fonte antes de reaproveitar o card aberto do contato. Para remover a assinatura, desligue primeiro o reaproveitamento do card aberto.")}
             </p>}
           </section>
+
+          <ValorEJsonDaFonte source={source} podeEditar={podeGerirWebhooks} />
 
           <section className="space-y-2">
             <p className="text-sm font-medium text-text">{t("Personalizar perguntas do formulário")}</p>

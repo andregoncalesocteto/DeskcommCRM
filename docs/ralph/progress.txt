@@ -306,3 +306,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - Lacuna declarada: se um campo com essa chave for declarado no funil DEPOIS de configurar a fonte, nada impede (a checagem é só no PATCH da fonte). A régua de campos pode recusar o objeto; o envio do reenvio já tolera a recusa (log).
 - Testes: rota in 7 novos (31 no arquivo), PATCH da fonte 10, lib 7. Sabotagens: sem a guarda de coincidência → 1 vermelho (previsto 1); sem a checagem de campo declarado → 2 (previsto 2).
 ---
+
+## 2026-10-29 - US-033
+- `app/app/webhooks/_components/ValorEJsonDaFonte.tsx` (seção do painel da fonte, sem entrada de navegação): campo do valor + unidade (reais/centavos) + chave do JSON, salva só quando mudou (os três de uma vez, `null` limpa), valida no cliente com as MESMAS regras da API, desabilitada para quem não gere webhooks. Dois avisos: (a) etapa padrão de GANHO sem campo do valor SALVO (a venda chegaria sem valor); (b) a etapa padrão vale para TODO envio da fonte (e aponta para os eventos do funil). `WebhookSourceRow` e o PATCH do hook ganharam os 3 campos; o fixture de `fonte-de-webhook-assinatura-hmac.test.tsx` também.
+- Testes: 14 do componente. Sabotagem (aviso de ganho sem checar o campo salvo): 1 vermelho (previsto 1). 9 traduções es. Leitura defensiva `data?.data?.stages?.find` (o teste da assinatura devolve `{data: []}`).
+- Verificado NO NAVEGADOR (nota em evidence/eventos-do-funil/verificacao-no-navegador-us033.md): avisos, salvar, chave igual a campo da ficha recusada com a mensagem na tela, envio real → card em Compras com 7390 e JSON; valor "abc" → 200 sem valor + log. Sobras 0.
+- ACHADO fora do escopo: o banco local da stack não tem a migration 9028 (`recurring_months`); criação de card por webhook responde 500 ali. Não alterei o esquema da stack; provei o caminho do card aberto reaproveitado.
+- **Learnings for future iterations:**
+  - `userEvent.type` trata `[` como sintaxe especial: use `paste` para texto com colchetes.
+  - Um envio que FECHA o card (etapa de ganho) tira o card do "aberto": o segundo envio de teste já não reaproveita; reabrir o card via SQL entre as provas.
+---
