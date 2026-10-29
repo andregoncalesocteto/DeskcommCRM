@@ -145,3 +145,14 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Closure perde o estreitamento de `authz` (união ok/não-ok): capturar `const userId = authz.user.id` antes de funções internas.
   - Ação de auditoria nova precisa entrar em lib/audit/actions.ts.
 ---
+
+## 2026-10-29 - US-015
+- PATCH e DELETE em app/api/v1/pipelines/[id]/events/[event_id]/route.ts. PATCH: edição parcial (edicaoDoEventoSchema = camposDoCadastro estrito, partial, ao menos um campo); só o que MUDOU entra no UPDATE e nas validações (editar o nome de um evento cuja etapa foi arquivada depois não quebra); o par value_path/value_unit vale para o RESULTADO mesclado; a `key` só muda se nunca recebeu registro (eventoJaRecebeuAlgo → 409); chave repetida no funil → 409; audita `pipeline_event.updated` com os campos e o de/para da etapa. Reenviar o mesmo valor é no-op (200, sem UPDATE, sem auditoria).
+- DELETE: desativa (is_active=false), não apaga; já desativado é no-op (200); audita `pipeline_event.deactivated`. A operação crm_track_event já recusa evento desativado com `evento_inativo` (US-008).
+- Ambos: requireSupportWrite antes do efeito, requireRole('manager'), UPDATE filtrado por organização da sessão + funil do caminho + id; id que não é UUID → 404 sem tocar o banco.
+- Dublê tests/helpers/banco-falso-de-eventos.ts passou a devolver CÓPIAS das linhas (o banco real não entrega referência que o UPDATE seguinte altera); sem isso o de/para da auditoria saía errado no teste.
+- app/api/v1/pipelines/[id]/events/[event_id]/route.test.ts: 35 casos. Sabotagens: sem filtro de organização no UPDATE (1, previsto 1); sem imutabilidade da chave (1, 1); revalidar a etapa sem mudança (4, previsto 1: minha sabotagem ignorava também a etapa nova); par do valor sem mesclar (1, previsto 2); DELETE sem o no-op (1, 1); todo campo reenviado como mudança (2, 2).
+- 35 arquivos de gate (suporte, i18n, audit, rotas, navegação) + as rotas do cadastro: 37 arquivos / 393 testes verdes.
+- **Learnings for future iterations:**
+  - Caminho com dois parâmetros dinâmicos fica em `[id]/events/[event_id]`; no teste, o helper está 7 níveis acima (`../../../../../../../tests/helpers/...`).
+---

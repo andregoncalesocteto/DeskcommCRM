@@ -128,6 +128,32 @@ export const novoEventoSchema = z
   .refine((e) => (e.value_path == null) === (e.value_unit == null), VALOR_JUNTO);
 export type NovoEvento = z.infer<typeof novoEventoSchema>;
 
+/** Edição parcial: o que não vem fica como está; `null` limpa. Ao menos um campo. A `key` só muda se nunca recebeu nada. */
+export const edicaoDoEventoSchema = z
+  .strictObject(camposDoCadastro)
+  .partial()
+  .refine((e) => Object.values(e).some((v) => v !== undefined), { message: "Envie ao menos um campo para alterar." });
+export type EdicaoDoEvento = z.infer<typeof edicaoDoEventoSchema>;
+
+/** O evento já recebeu algo neste funil? Se sim, a chave não pode mudar: o histórico guarda o nome. */
+export async function eventoJaRecebeuAlgo(
+  supabase: SupabaseClient,
+  organizationId: string,
+  pipelineId: string,
+  chave: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("crm_lead_activities")
+    .select("performed_at, lead:crm_leads!inner(pipeline_id)")
+    .eq("organization_id", organizationId)
+    .eq("type", "external_event")
+    .eq("payload->>event", chave)
+    .eq("lead.pipeline_id", pipelineId)
+    .limit(1);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
 export interface ValidacaoDoCadastro {
   /** Recusam o cadastro (422). */
   erros: string[];

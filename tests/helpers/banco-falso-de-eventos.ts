@@ -60,12 +60,12 @@ export function criarBancoFalso(tabelas: Record<string, Linha[]>, opcoes: Opcoes
         const novas = (Array.isArray(valores) ? valores : [valores]) as Linha[];
         const gravadas = novas.map((n) => ({ id: `novo-${(tabelas[tabela] ??= []).length + 1}`, ...n }));
         tabelas[tabela]!.push(...gravadas);
-        return { data: gravadas, error: null, count: null };
+        return { data: gravadas.map((l) => ({ ...l })), error: null, count: null };
       }
       if (operacao === "update") {
         const alvo = casam();
         for (const l of alvo) Object.assign(l, valores as Linha);
-        return { data: alvo, error: null, count: null };
+        return { data: alvo.map((l) => ({ ...l })), error: null, count: null };
       }
       if (operacao === "delete") {
         const alvo = casam();
@@ -82,7 +82,8 @@ export function criarBancoFalso(tabelas: Record<string, Linha[]>, opcoes: Opcoes
         });
       }
       if (teto !== null) linhas = linhas.slice(0, teto);
-      return { data: linhas, error: null, count: contar ? total : null };
+      // Cópias, como o banco real: quem lê não segura uma referência que o UPDATE seguinte altera.
+      return { data: linhas.map((l) => ({ ...l })), error: null, count: contar ? total : null };
     }
 
     const b = {
