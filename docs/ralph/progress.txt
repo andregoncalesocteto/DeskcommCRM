@@ -52,3 +52,11 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - O comportamento de crm_add_lead_events para quem reenvia em sequência não mudou (mesma resposta registrados/repetidos).
 ---
+
+## 2026-10-29 - US-006
+- lib/leads/eventos-do-funil/caminho-e-valor.ts: resolverCaminho (só nomes de campo com ponto, sem índice/expressão, bloqueia __proto__/constructor/prototype, não atravessa lista) e valorEmCentavos (aritmética decimal sobre o texto do número; reais desloca duas casas e arredonda a terceira na metade para cima; centavos exige inteiro; recusa não numérico, não finito, negativo; sem teto, só o inteiro seguro limita).
+- tests/unit/eventos-do-funil-caminho-e-valor.test.ts (39 casos). Sabotagem: `Math.round(valor*100)` deixa o caso 1.005→101 vermelho (1); liberar o protótipo deixa o caso do protótipo vermelho (1).
+- **Learnings for future iterations:**
+  - `1.005 * 100 === 100.49999999999999`: valor em reais deve ser lido como texto decimal, não multiplicado.
+  - O limite "sem teto" é decisão do dono; o único limite é Number.isSafeInteger (R$ 90 trilhões).
+---
