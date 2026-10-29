@@ -5,6 +5,11 @@
 export const PUBLIC_PATHS: RegExp[] = [
   // Link público persistido: org e destino são resolvidos exclusivamente no servidor.
   /^\/api\/v1\/rastreio\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  // Porta pública de coleta do rastreador (etapa 2 de "Eventos do funil"). Quem chama é o SCRIPT no navegador do cliente
+  // final do nosso cliente: não tem, e não pode ter, cookie de sessão nossa nem token secreto. "Público" aqui só quer
+  // dizer que o proxy não decide — decidem a chave pública do caminho e a origem da requisição, dentro da rota
+  // (`app/api/v1/coleta/[chave]/route.ts`). Âncorada no formato EXATO da chave: nenhum sub-path nasce público de carona.
+  /^\/api\/v1\/coleta\/pk_[a-f0-9]{36}$/,
   /^\/$/,
   /^\/login(\/.*)?$/,
   /^\/signup$/,

@@ -208,3 +208,15 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Toda imagem versionada em evidence/ precisa ser CITADA PELO NOME em um .md (rodar `tests/unit/evidencia-citada.test.ts` ao adicionar capturas).
   - `pnpm cercas` leva ~5 min; as 14 falhas de e2e-apt/e2e-preparo são pré-existentes (ffmpeg/apt).
 ---
+
+## 2026-10-29 - US-022
+- Porta pública: `POST|OPTIONS /api/v1/coleta/[chave]` (a chave vai NO CAMINHO, não no corpo nem na query: o preflight OPTIONS não tem corpo e precisa saber de qual chave se trata para decidir o CORS). Entrada em `lib/auth/public-paths.ts` ancorada no formato exato `pk_[a-f0-9]{36}$`. `lib/tracker/coleta.ts` (resolverChave, origemPermitida, cabecalhosDeCors, corpoDaColetaSchema strict, teto de 20 eventos e 64 KB).
+- Decisões: chave desconhecida/malformada/revogada = a MESMA 404 sem CORS; origem fora da lista (ou sem Origin) = 403 sem CORS; corpo lido como texto (sendBeacon manda text/plain) e validado com Zod; organização e funil só da linha da chave; ator `webhook_source` com o id da chave; usa `registrarEventosDoFunil` (a mesma operação do crm_track_event). Resposta uniforme 200 `{eventos:[{event_id, resultado:"recebido"}]}` — o navegador não aprende o que o funil decidiu (a US-023 prova a uniformidade). O wrapper `ok()` só aceita 200/201/204: por isso 200 e não 202.
+- `lib/tracker/identificar-pedido.ts` é um STUB que devolve null (todo evento é descartado sem efeito) até a US-024 preencher a regra do idtrack. A porta, portanto, está de pé mas inerte até lá.
+- Gate `suporte-cobertura-de-efeitos`: exceção explícita e justificada para a rota (não há sessão nem sessão de suporte). Helper `banco-falso-de-eventos` ganhou `.is()`.
+- Sem auditoria por requisição: a história já está em crm_lead_activities e auditar cada page_view do navegador repetiria o problema do cron ocioso (95% do audit log) — a US-023/30 documenta; a criação/revogação da chave é auditada (US-021).
+- Testes: 25 casos da rota + 7 do public-paths; sabotagem (origemPermitida sempre devolve a origem): 2 vermelhos, como previsto.
+- **Learnings for future iterations:**
+  - `ok()` em lib/api/wrappers.ts aceita só status 200|201|204.
+  - A chave pública no caminho permite CORS por chave no preflight; chave em corpo/header não permitiria.
+---

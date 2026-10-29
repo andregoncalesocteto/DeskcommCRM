@@ -109,6 +109,11 @@ export function criarBancoFalso(tabelas: Record<string, Linha[]>, opcoes: Opcoes
         filtros.push([c, v]);
         return b;
       },
+      // `.is(coluna, null)`: o banco compara com NULL; aqui, igualdade com o valor (ausente conta como null).
+      is: (c: string, v: unknown) => {
+        filtros.push([c, v]);
+        return b;
+      },
       gte: (c: string, v: string) => {
         maiorOuIgual.push([c, v]);
         return b;
