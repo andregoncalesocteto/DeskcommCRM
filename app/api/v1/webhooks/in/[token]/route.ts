@@ -22,6 +22,7 @@ import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { classificarLeadInicial, type ResultadoClassificacaoInicial } from "@/lib/leads/classificacao-inicial";
 import type { CreateLeadInput } from "@/lib/schemas";
+import { valorDoEnvio } from "@/lib/webhooks/valor-do-envio";
 import { mapInboundPayload, extrairAtribuicaoDoInbound, verifyInboundSignature, type FieldMap } from "@/lib/webhooks/inbound";
 import { HEADER_ASSINATURA_DE_ENTRADA } from "@/lib/webhooks/assinatura";
 import { encontrarContatoPorTelefoneComNome } from "@/lib/channels/contato-por-telefone";
@@ -181,7 +182,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const admin = createAdminClient();
   const { data: source, error: srcErr } = await admin
     .from("webhook_sources")
-    .select("id, name, organization_id, secret_encrypted, default_pipeline_id, default_stage_id, field_map, form_fields, redirect_to, is_active, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture")
+    .select("id, name, organization_id, secret_encrypted, default_pipeline_id, default_stage_id, field_map, form_fields, redirect_to, is_active, authorize_ai_on_capture, update_existing_lead_on_capture, reuse_open_lead_on_capture, value_path, value_unit")
     .eq("path_token", token)
     .maybeSingle();
   if (srcErr) return fail("internal_error", srcErr.message, 500, { requestId });
@@ -364,18 +365,21 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     webhookSourceId: string | null;
     title: string | null;
     customFields: Record<string, unknown>;
+    /** O valor que o card tem hoje: só um valor DIFERENTE conta como mudança num reenvio. */
+    valueCents: number | null;
     pipelineId: string;
     stageId: string | null;
   };
 
   const COLUNAS_DO_CARD_POR_ID =
-    "id, contact_id, webhook_source_id, title, custom_fields, pipeline_id, stage_id";
+    "id, contact_id, webhook_source_id, title, custom_fields, value_cents, pipeline_id, stage_id";
   const montarCardPorId = (data: Record<string, unknown>): LeadExistente => ({
     id: data.id as string,
     contactId: (data.contact_id as string | null) ?? null,
     webhookSourceId: (data.webhook_source_id as string | null) ?? null,
     title: (data.title as string | null) ?? null,
     customFields: (data.custom_fields as Record<string, unknown> | null) ?? {},
+    valueCents: (data.value_cents as number | null | undefined) ?? null,
     pipelineId: (data.pipeline_id as string) ?? "",
     stageId: (data.stage_id as string | null) ?? null,
   });
@@ -495,6 +499,18 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     utm: mapped.source_metadata,
   };
 
+  // O valor da venda (etapa 3 de "Eventos do funil"): lido do corpo CRU, com a régua dos eventos do funil. Valor ilegível
+  // NUNCA derruba o envio — o card segue sem `value_cents` e o motivo fica no log.
+  const valorLido = valorDoEnvio(payload, source);
+  if (valorLido.tipo === "ausente" || valorLido.tipo === "invalido") {
+    logger.warn("[webhooks.in] valor da venda não aproveitado", {
+      webhook_source_id: source.id,
+      caminho: valorLido.caminho,
+      motivo: valorLido.tipo === "ausente" ? "campo_ausente" : valorLido.motivo,
+    });
+  }
+  const valorCents = valorLido.tipo === "valor" ? valorLido.centavos : null;
+
   /**
    * O fecho de um reenvio: o `external_id` já aponta para um card (#2316).
    *
@@ -586,7 +602,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
     // Mesmo envio repetido: nada é recriado — a ferramenta que reenviou recebe
     // sucesso e para de tentar.
-    if (Object.keys(campos).length === 0 && !tituloMudou && etapaAlvo === null) {
+    const valorMudou = valorCents !== null && valorCents !== lead.valueCents;
+    if (Object.keys(campos).length === 0 && !tituloMudou && !valorMudou && etapaAlvo === null) {
       return fecharComoReenvio();
     }
 
@@ -596,10 +613,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       requestId,
     };
     try {
-      if (Object.keys(campos).length > 0 || tituloMudou) {
+      if (Object.keys(campos).length > 0 || tituloMudou || valorMudou) {
         await updateLeadHandler(admin, ctxDoLead, lead.id, {
           ...(tituloMudou && mapped.name ? { title: mapped.name } : {}),
           ...(Object.keys(campos).length > 0 ? { custom_fields: campos } : {}),
+          // O valor entra ANTES do movimento: a etapa de ganho já enxerga o total certo.
+          ...(valorMudou ? { value_cents: valorCents } : {}),
         });
       }
       if (etapaAlvo) {
@@ -1031,10 +1050,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       requestId,
     };
     try {
-      if (Object.keys(campos).length > 0 || tituloMudou) {
+      const valorMudou = valorCents !== null && valorCents !== (cardAberto.value_cents ?? null);
+      if (Object.keys(campos).length > 0 || tituloMudou || valorMudou) {
         await updateLeadHandler(admin, ctxDoCard, cardAberto.id, {
           ...(tituloMudou && mapped.name ? { title: mapped.name } : {}),
           ...(Object.keys(campos).length > 0 ? { custom_fields: campos } : {}),
+          ...(valorMudou ? { value_cents: valorCents } : {}),
         });
       }
       if (etapaDestino) {
@@ -1081,6 +1102,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     tags: [],
     source: "webhook",
     custom_fields: mapped.custom_fields,
+    ...(valorCents !== null ? { value_cents: valorCents } : {}),
     source_metadata: { ...mapped.source_metadata, webhook_source_id: source.id },
     // A coluna que responde "de quem é este card" para a atualização por
     // integração (migration 0683). Vai junto do `source_metadata` porque é o

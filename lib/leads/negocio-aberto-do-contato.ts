@@ -38,6 +38,8 @@ export interface NegocioAbertoNoFunil {
   contact_id: string | null;
   title: string | null;
   custom_fields: Record<string, unknown>;
+  /** O valor do card hoje; ausente em quem monta este tipo à mão. */
+  value_cents?: number | null;
   stage_id: string | null;
   /**
    * O `external_id` que JÁ identifica este card, ou `null` para um card sem
@@ -61,7 +63,7 @@ export async function negocioAbertoDoContato(
 ): Promise<NegocioAbertoNoFunil | null> {
   const { data } = await admin
     .from("crm_leads")
-    .select("id, contact_id, title, custom_fields, stage_id, external_id, webhook_source_id")
+    .select("id, contact_id, title, custom_fields, value_cents, stage_id, external_id, webhook_source_id")
     .eq("organization_id", organizationId)
     .eq("contact_id", contactId)
     .eq("pipeline_id", pipelineId)

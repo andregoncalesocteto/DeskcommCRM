@@ -13944,6 +13944,8 @@ export type Database = {
           secret_encrypted: string | null;
           update_existing_lead_on_capture: boolean;
           updated_at: string;
+          value_path: string | null;
+          value_unit: string | null;
         };
         ComputedFields: never;
         Insert: {
@@ -13968,6 +13970,8 @@ export type Database = {
           secret_encrypted?: string | null;
           update_existing_lead_on_capture?: boolean;
           updated_at?: string;
+          value_path?: string | null;
+          value_unit?: string | null;
         };
         Update: {
           authorize_ai_on_capture?: boolean;
@@ -13991,6 +13995,8 @@ export type Database = {
           secret_encrypted?: string | null;
           update_existing_lead_on_capture?: boolean;
           updated_at?: string;
+          value_path?: string | null;
+          value_unit?: string | null;
         };
         Relationships: [
           {

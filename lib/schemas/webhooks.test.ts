@@ -300,3 +300,18 @@ describe("assign_owner: atendente fixo ou rodízio", () => {
     expect(patch.success).toBe(false);
   });
 });
+
+describe("updateWebhookSourceSchema — o campo do valor da venda", () => {
+  it("aceita caminho e unidade JUNTOS, e nenhum dos dois", () => {
+    expect(updateWebhookSourceSchema.safeParse({ value_path: "pedido.total", value_unit: "reais" }).success).toBe(true);
+    expect(updateWebhookSourceSchema.safeParse({ value_path: null, value_unit: null }).success).toBe(true);
+    expect(updateWebhookSourceSchema.safeParse({ name: "Fonte" }).success).toBe(true);
+  });
+  it("recusa um sem o outro, unidade desconhecida e caminho fora da forma", () => {
+    expect(updateWebhookSourceSchema.safeParse({ value_path: "value" }).success).toBe(false);
+    expect(updateWebhookSourceSchema.safeParse({ value_unit: "reais" }).success).toBe(false);
+    expect(updateWebhookSourceSchema.safeParse({ value_path: "value", value_unit: "dólares" }).success).toBe(false);
+    expect(updateWebhookSourceSchema.safeParse({ value_path: "items[0].price", value_unit: "reais" }).success).toBe(false);
+    expect(updateWebhookSourceSchema.safeParse({ value_path: "a".repeat(201), value_unit: "reais" }).success).toBe(false);
+  });
+});

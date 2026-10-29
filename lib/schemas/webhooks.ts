@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { webhookFormFieldsSchema } from "@/lib/webhooks/formulario";
+import { FORMA_DO_CAMINHO } from "@/lib/leads/eventos-do-funil/caminho-e-valor";
 
 import { conditionsSchema } from "@/lib/automation/conditions";
 import {
@@ -618,6 +619,18 @@ export const updateWebhookSourceSchema = createWebhookSourceSchema.partial().ext
    * sistemas.
    */
   reuse_open_lead_on_capture: z.boolean().optional(),
+  /**
+   * O campo do valor da venda e a unidade (etapa 3 de "Eventos do funil"): onde, no corpo do envio, está o total do
+   * pedido (`value`, `pedido.total`) e se vem em reais (59.9) ou em centavos (5990). Preenche `value_cents` do card.
+   *
+   * Só entra no PATCH, como as opções irmãs. Os dois vão juntos ou nenhum dos dois (a mesma regra do cadastro de eventos
+   * e do `check` da coluna); `null` limpa.
+   */
+  value_path: z.string().max(200).regex(FORMA_DO_CAMINHO, "Use só nomes de campo separados por ponto, como pedido.total.").nullish(),
+  value_unit: z.enum(["reais", "centavos"]).nullish(),
+}).refine((f) => f.value_path === undefined && f.value_unit === undefined || (f.value_path == null) === (f.value_unit == null), {
+  message: "Informe o campo do valor e a unidade juntos, ou nenhum dos dois.",
+  path: ["value_path"],
 });
 
 export const createAutomationRuleSchema = z

@@ -287,3 +287,14 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - LGPD: `docs/saas/contrato-e-lgpd.md` ganhou o item 6 (empresa que instala o rastreador é controladora, informa no aviso/banner; o script não envia dados pessoais e guarda só o idtrack em sessionStorage). Conferido contra o código do script (chaves removidas) e os testes.
 - Etapa 2 completa (US-020…US-030). Restam a etapa 3 (US-031…036).
 ---
+
+## 2026-10-29 - US-031 (etapa 3 começa)
+- Migration `20261029210000_9042_fonte_de_webhook_valor_da_venda.sql` + apêndice no baseline: `webhook_sources.value_path` e `value_unit` (nulas; juntos ou nenhum; unidade reais|centavos; caminho só com nomes separados por ponto, ≤200). Tipos à mão em database.types.ts. Invariante `fonte-de-webhook-valor-da-venda.test.ts` (5 casos); install e update verdes; sabotagem (check do "juntos" → `true`): 1 vermelho (previsto 1).
+- `lib/webhooks/valor-do-envio.ts` reaproveita `resolverCaminho`/`valorEmCentavos` dos eventos do funil: devolve valor | ausente | inválido | sem_configuração; NUNCA derruba o envio (motivo vai para `logger.warn("[webhooks.in] valor da venda não aproveitado")`).
+- Rota `webhooks/in/[token]`: `value_cents` entra nos 3 caminhos (criação via `leadInput`; reenvio por external_id e reuso do card aberto via `updateLeadHandler`, ANTES do `moveLeadHandler`); reenvio só atualiza se o valor MUDOU (`valueCents` lido do card; `NegocioAbertoNoFunil.value_cents?` adicionado ao select). PATCH da fonte aceita `value_path`+`value_unit` (schema com refine "juntos").
+- Testes: rota 24 (9 novos: reais, texto "1.005"→101, centavos aninhado, ausente, 3 inválidos, sem configuração, ordem update→move, reenvio igual/novo), lib 6, schema 2. Sabotagem (tirar `value_cents` da criação): 3 vermelhos (previsto 3).
+- Efeito colateral conhecido do mapeador genérico: o campo `value` (escalar) TAMBÉM vira custom_field `value` — por isso o teste do reenvio traz `value` no card.
+- **Learnings for future iterations:**
+  - `webhook_sources.kind` só aceita 'lead_capture'; `path_token` é NOT NULL sem default.
+  - Próximo NNNN livre: 9043.
+---

@@ -81,6 +81,8 @@ vi.mock("@/app/api/v1/leads/_handler", () => ({
 }));
 vi.mock("@/lib/dev/kick-local-pipeline", () => ({ kickLocalPipeline: async () => undefined }));
 
+import { logger } from "@/lib/logger";
+
 import { POST } from "./route";
 
 const ORG = "org-1";
@@ -513,5 +515,100 @@ describe("as bordas do portão 3 (#3366)", () => {
     expect(carimbos()).toHaveLength(0);
     expect(leiturasDoCardAberto()).toHaveLength(0);
     expect(desfecho()).toBe("duplicado");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Etapa 3 de "Eventos do funil": o valor da venda do envio preenche `value_cents` do card.
+// ---------------------------------------------------------------------------
+
+describe("valor da venda no envio (value_path + value_unit)", () => {
+  const COM_VALOR = { reuse_open_lead_on_capture: false, value_path: "value", value_unit: "reais" };
+  const avisos = () => (logger.warn as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes("valor da venda"));
+
+  beforeEach(() => {
+    vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+  });
+
+  const valorGravado = () => (h.criarLead.mock.calls[0]?.[2] as Record<string, unknown>).value_cents;
+
+  it("⭐ reais: 73.9 vira 7390 centavos na criação do card", async () => {
+    m.fonte = { ...FONTE, ...COM_VALOR };
+    const res = await enviar({ ...ENVIO_DO_TRIAL, value: 73.9 });
+    expect(res.status).toBe(200);
+    expect(valorGravado()).toBe(7390);
+    expect(avisos()).toHaveLength(0);
+  });
+
+  it("⭐ reais em texto decimal, sem erro de ponto flutuante: \"1.005\" vira 101 centavos", async () => {
+    m.fonte = { ...FONTE, ...COM_VALOR };
+    await enviar({ ...ENVIO_DO_TRIAL, value: "1.005" });
+    expect(valorGravado()).toBe(101);
+  });
+
+  it("⭐ centavos, em campo aninhado: pedido.total 7390 fica 7390", async () => {
+    m.fonte = { ...FONTE, ...COM_VALOR, value_path: "pedido.total", value_unit: "centavos" };
+    await enviar({ ...ENVIO_DO_TRIAL, pedido: { total: 7390 } });
+    expect(valorGravado()).toBe(7390);
+  });
+
+  it("⭐ campo ausente: o card é criado SEM valor e o motivo vai para o log", async () => {
+    m.fonte = { ...FONTE, ...COM_VALOR };
+    const res = await enviar(ENVIO_DO_TRIAL);
+    expect(res.status).toBe(200);
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect(valorGravado()).toBeUndefined();
+    expect(avisos()).toHaveLength(1);
+    expect(avisos()[0]![1]).toMatchObject({ caminho: "value", motivo: "campo_ausente", webhook_source_id: "fonte-1" });
+  });
+
+  it.each([
+    ["texto", "abc", "nao_numerico"],
+    ["negativo", -5, "negativo"],
+    ["centavos quebrados", "12.5", null],
+  ])("⭐ valor inválido (%s) não derruba o envio: card criado sem valor", async (_nome, valor, motivo) => {
+    m.fonte = { ...FONTE, ...COM_VALOR, ...(motivo === null ? { value_unit: "centavos" } : {}) };
+    const res = await enviar({ ...ENVIO_DO_TRIAL, value: valor });
+    expect(res.status).toBe(200);
+    expect(h.criarLead).toHaveBeenCalledTimes(1);
+    expect(valorGravado()).toBeUndefined();
+    expect(avisos()).toHaveLength(1);
+    if (motivo) expect(avisos()[0]![1]).toMatchObject({ motivo });
+  });
+
+  it("fonte SEM o campo do valor configurado: o corpo traz `value` e nada acontece (como hoje)", async () => {
+    m.fonte = { ...FONTE, reuse_open_lead_on_capture: false };
+    await enviar({ ...ENVIO_DO_TRIAL, value: 73.9 });
+    expect(valorGravado()).toBeUndefined();
+    expect(avisos()).toHaveLength(0);
+  });
+
+  it("⭐ card aberto reaproveitado: o valor é gravado ANTES de o card mudar de etapa", async () => {
+    m.fonte = { ...FONTE, value_path: "value", value_unit: "reais", default_stage_id: "stage-2" };
+    await enviar({ ...ENVIO_DO_TRIAL, value: 73.9 });
+    expect(h.criarLead).not.toHaveBeenCalled();
+    const gravado = h.atualizarLead.mock.calls.find((c) => (c[3] as Record<string, unknown>).value_cents !== undefined);
+    expect(gravado?.[3]).toMatchObject({ value_cents: 7390 });
+    expect(h.moverLead).toHaveBeenCalledTimes(1);
+    const ordemDoUpdate = h.atualizarLead.mock.invocationCallOrder[h.atualizarLead.mock.calls.indexOf(gravado!)]!;
+    expect(ordemDoUpdate).toBeLessThan(h.moverLead.mock.invocationCallOrder[0]!);
+  });
+
+  it("⭐ reenvio do mesmo id: valor IGUAL ao do card não é regravado; valor NOVO atualiza", async () => {
+    m.fonte = { ...FONTE, ...COM_VALOR, update_existing_lead_on_capture: true };
+    m.porExternalId = {
+      ...CARD_ABERTO, source: "webhook", external_id: "conta-3357", webhook_source_id: "fonte-1", value_cents: 7390,
+      // `value` também é um campo comum do corpo (o mapeador genérico o guarda): o card já o tem, então o único motivo
+      // para atualizar neste reenvio seria o valor em centavos.
+      custom_fields: { evento: "trial_iniciado", value: "73.9" },
+    };
+    const igual = await enviar({ ...ENVIO_DO_TRIAL, value: 73.9 });
+    expect(igual.status).toBe(200);
+    expect(h.atualizarLead).not.toHaveBeenCalled();
+    expect(desfecho()).toBe("duplicado");
+
+    const novo = await enviar({ ...ENVIO_DO_TRIAL, value: 80 });
+    expect(novo.status).toBe(200);
+    expect(h.atualizarLead.mock.calls.at(-1)?.[3]).toMatchObject({ value_cents: 8000 });
   });
 });
