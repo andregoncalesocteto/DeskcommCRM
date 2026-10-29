@@ -1,0 +1,333 @@
+# =====================================================================================================
+# CRM MCP — requisições curl para o Postman (Bella Capri / cardápio digital)
+# =====================================================================================================
+#
+# COMO IMPORTAR NO POSTMAN
+#   O Postman importa UM curl por vez:
+#   1. Copie um bloco abaixo (de "curl" até a última linha do comando, sem os comentários "#").
+#   2. Postman > Import > "Raw text" > cole > Continue > Import.
+#   3. Repita para cada requisição. Dica: crie uma Collection "CRM MCP" e salve todas dentro dela.
+#
+# VARIÁVEIS (Postman: crie um Environment "CRM Bella Capri" com estas chaves)
+#   base_url          http://localhost:3000        (produção: o domínio da instalação, sem barra no fim)
+#   mcp_token         dsk_...                       (gerado em API Tokens, escopos mcp:read + mcp:write)
+#   contact_id        id do contato = o valor do ?idtrack= do link do cardápio
+#   lead_id           id do PEDIDO (vem de crm_list_leads; NÃO é o contact_id)
+#   pipeline_id       id do funil "Pedidos"
+#   stage_conversas, stage_visitas, stage_visualizacoes, stage_carrinho, stage_revisao,
+#   stage_compras, stage_cancelado          ids das etapas (vêm de crm_list_stages)
+#
+#   Valores da loja RPA - Abrão Thomé (instalação de teste; em outra loja os ids mudam):
+#     pipeline_id          7443d257-0d1b-4d92-89bb-cb3a2db37a9d
+#     stage_conversas      6a3a1d29-e054-4f33-b406-dcb90ff9c948
+#     stage_visitas        f80a9492-01a1-4ae7-8220-498c76a17bf8
+#     stage_visualizacoes  d5f2f5f4-1a68-43bc-baa3-a7fe47072d77
+#     stage_carrinho       2f0ccfbd-d090-4b50-8f72-ca222c2e951b
+#     stage_revisao        374d3ec8-b50d-46a7-888a-42a1d97be457
+#     stage_compras        9652f450-7bb7-48c7-889f-ae258cabb8cc
+#     stage_cancelado      927c63d1-e91a-4c43-9791-6dc19640b8a3
+#
+# IMPORTANTE
+#   * O cabeçalho Accept PRECISA ter application/json E text/event-stream, senão o servidor devolve 406.
+#   * A resposta vem em SSE: o Postman mostra o texto "event: message / data: {...}". O JSON útil é o que vem
+#     depois de "data: ". (Para o Postman parsear, use um script de teste: ver o fim deste arquivo.)
+#   * Erro de ferramenta vem com HTTP 200 e "isError": true no resultado. Erro de token é HTTP 401/403/429.
+#   * Não é preciso chamar "initialize" antes: cada requisição é independente.
+#   * Esta pasta NÃO guarda token. Cole o token só no Environment do Postman (marque como "secret").
+# =====================================================================================================
+
+
+# -----------------------------------------------------------------------------------------------------
+# 0. initialize  (opcional — só para conferir a versão do servidor)
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"postman","version":"1.0"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 1. tools/list  — lista as ferramentas que este token enxerga
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 2. crm_list_pipelines  — acha o funil padrão ("Pedidos", is_default = true)
+#    Resposta: structuredContent.pipelines[] { id, name, slug, is_default, ... }
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"crm_list_pipelines","arguments":{}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 3. crm_list_stages  — ids das etapas do funil (use id ou name, NUNCA slug)
+#    Resposta: structuredContent.etapas[] { id, name, slug, position, is_won, is_lost, ... }   <-- chave "etapas"
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"crm_list_stages","arguments":{"pipeline_id":"{{pipeline_id}}"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 4. crm_get_contact  — telefone do cliente (login do cardápio sem digitar de novo)
+#    contact_id = valor do ?idtrack= do link.
+#    Resposta: structuredContent { id, name, phone ("+5517982290042"), is_personal, is_blocked, ... }
+#    Contato "pessoal" é recusado (isError): cair no login manual. Não gravar o telefone em log.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"crm_get_contact","arguments":{"contact_id":"{{contact_id}}"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 5. crm_list_leads  — pedidos ABERTOS na etapa Conversas (primeira visita do cliente)
+#    NÃO existe filtro por contato: escolha, na resposta, o item com contact_id == idtrack
+#    (se houver mais de um, o mais recente). O "id" desse item é o lead_id dos próximos passos.
+#    Resposta: structuredContent { leads[] { id, contact_id, status, stage{id,name}, ... }, cursor, has_more }
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"crm_list_leads","arguments":{"status":"open","stage_id":"{{stage_conversas}}","limit":100}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 5b. crm_list_leads  — mesma busca em OUTRA etapa (visita repetida: o pedido já avançou)
+#     Troque o stage_id pela etapa onde procurar (stage_visitas, stage_visualizacoes, stage_carrinho, stage_revisao).
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"crm_list_leads","arguments":{"status":"open","stage_id":"{{stage_visitas}}","limit":100}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 5c. crm_list_leads  — próxima página (quando has_more = true; cole em "cursor" o valor devolvido)
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"crm_list_leads","arguments":{"status":"open","stage_id":"{{stage_conversas}}","limit":100,"cursor":"COLE_O_CURSOR_AQUI"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 6. crm_get_lead  — confere um pedido pelo lead_id
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"crm_get_lead","arguments":{"lead_id":"{{lead_id}}"}}}'
+
+
+# =====================================================================================================
+# REGISTRAR, ATUALIZAR E MOVER O PEDIDO
+#   Registros (page_view, view_item): crm_add_lead_events, em lote, nunca substituem.
+#   Estados (cart_sync, begin_checkout, purchase): crm_update_lead, substituem, JSON guardado em custom_fields.
+#   Mover (crm_move_lead_stage) SÓ se o NÍVEL avança: page_view 1 · view_item 2 · cart_sync 3 · begin_checkout 4 · purchase/cancel 5.
+#   Chamar Humano fica fora dos níveis. lead_id = id do PEDIDO (de crm_list_leads), não o idtrack.
+#   Mover para a etapa em que o pedido já está é aceito, mas gera um evento sem efeito: evite.
+# =====================================================================================================
+
+# -----------------------------------------------------------------------------------------------------
+# 7a. page_view  1) REGISTRAR visitas (lote)
+#    Evento page_view {screen_name}: uma linha NOVA por visita.
+#    REQUER crm_add_lead_events (tools/list precisa listá-la). Sem ela: plano B do guia (seção 5).
+#    VAI EM LOTE: acumule no servidor do cardápio e envie a cada ~30-60 s ou junto do próximo avanço.
+#    Cada evento: at = hora do evento (ISO-8601) e event_id gerado NA HORA do evento (reenvio não duplica). Máx. 50 por chamada.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"crm_add_lead_events","arguments":{"lead_id":"{{lead_id}}","events":[{"event":"page_view","event_id":"sess-9f2c-0001","at":"2026-10-28T17:20:10-03:00","data":{"screen_name":"home"}},{"event":"page_view","event_id":"sess-9f2c-0002","at":"2026-10-28T17:20:42-03:00","data":{"screen_name":"cardapio"}}]}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 7b. page_view  2) MOVER  ->  Visitas  (só na 1ª vez)
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_visitas}}","reason":"page_view"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 8a. view_item  1) REGISTRAR itens vistos (lote)
+#    Evento view_item {item_id, item_name, price, category}: uma linha NOVA por item visto.
+#    REQUER crm_add_lead_events (tools/list precisa listá-la). Sem ela: plano B do guia (seção 5).
+#    VAI EM LOTE: acumule no servidor do cardápio e envie a cada ~30-60 s ou junto do próximo avanço.
+#    Cada evento: at = hora do evento (ISO-8601) e event_id gerado NA HORA do evento (reenvio não duplica). Máx. 50 por chamada.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"crm_add_lead_events","arguments":{"lead_id":"{{lead_id}}","events":[{"event":"view_item","event_id":"sess-9f2c-0003","at":"2026-10-28T17:21:05-03:00","data":{"item_id":"pz-calabresa-g","item_name":"Calabresa G","price":59.9,"category":"Pizzas"}},{"event":"view_item","event_id":"sess-9f2c-0004","at":"2026-10-28T17:21:31-03:00","data":{"item_id":"bb-guarana-2l","item_name":"Guaraná 2L","price":9.0,"category":"Bebidas"}},{"event":"view_item","event_id":"sess-9f2c-0005","at":"2026-10-28T17:22:02-03:00","data":{"item_id":"pz-margherita-g","item_name":"Margherita G","price":54.9,"category":"Pizzas"}}]}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 8b. view_item  2) MOVER  ->  Visualizações  (só na 1ª vez)
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_visualizacoes}}","reason":"view_item"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 9a. cart_sync  1) ATUALIZAR o carrinho (estado)
+#    Evento cart_sync {items:[...]} = carrinho INTEIRO (substitui o add_to_cart). cart = o payload; itens = texto legível; qtd_itens = soma das quantity.
+#    Opcional: value_cents = soma de price x quantity em centavos. Debounce de poucos segundos. Carrinho vazio atualiza o JSON mas não move.
+#    ESTADO (o último vale): substitui o anterior. ATUALIZE ANTES DE MOVER. Dinheiro dos campos do CRM em CENTAVOS inteiros;
+#    dentro do JSON os valores ficam como o cardápio mandou. Omita campos vazios. O JSON vai em chave NÃO declarada.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"crm_update_lead","arguments":{"lead_id":"{{lead_id}}","custom_fields":{"cart":{"items":[{"item_id":"pz-calabresa-g","item_name":"Calabresa G","price":59.9,"quantity":1,"category":"Pizzas"},{"item_id":"bb-guarana-2l","item_name":"Guaraná 2L","price":9.0,"quantity":1,"category":"Bebidas"}]},"itens":"1x Calabresa G (Pizzas) — R$ 59,90\n1x Guaraná 2L (Bebidas) — R$ 9,00","qtd_itens":2}}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 9b. cart_sync  2) MOVER  ->  Carrinho  (na 1ª vez com items não vazio)
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_carrinho}}","reason":"cart_sync"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 10a. begin_checkout  1) ATUALIZAR o checkout (estado)
+#    Evento begin_checkout {value, item_count, delivery_type, coupon} - 'atualiza a última'.
+#    checkout = o payload | value -> value_cents (centavos) | item_count -> qtd_itens | delivery_type -> tipo_entrega | coupon -> cupom
+#    ESTADO (o último vale): substitui o anterior. ATUALIZE ANTES DE MOVER. Dinheiro dos campos do CRM em CENTAVOS inteiros;
+#    dentro do JSON os valores ficam como o cardápio mandou. Omita campos vazios. O JSON vai em chave NÃO declarada.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"crm_update_lead","arguments":{"lead_id":"{{lead_id}}","value_cents":6890,"currency":"BRL","custom_fields":{"checkout":{"value":68.9,"item_count":2,"delivery_type":"delivery","coupon":"PROMO10"},"qtd_itens":2,"tipo_entrega":"delivery","cupom":"PROMO10"}}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 10b. begin_checkout  2) MOVER  ->  Revisão  (na 1ª vez)
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_revisao}}","reason":"begin_checkout"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 11a. purchase  1) ATUALIZAR o pedido final (estado)
+#    Evento purchase {order_id, value, delivery_type, subtotal, shipping, discount, payment_method, coupon, items}.
+#    pedido = o payload inteiro | value -> value_cents (TOTAL final pago) | order_id -> id_pedido_cardapio | subtotal/shipping/discount -> *_cents
+#    payment_method -> forma_pagamento | coupon -> cupom | items -> itens (texto). ATENÇÃO: confirme se items vem plano ou aninhado duas vezes.
+#    ESTADO (o último vale): substitui o anterior. ATUALIZE ANTES DE MOVER. Dinheiro dos campos do CRM em CENTAVOS inteiros;
+#    dentro do JSON os valores ficam como o cardápio mandou. Omita campos vazios. O JSON vai em chave NÃO declarada.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"crm_update_lead","arguments":{"lead_id":"{{lead_id}}","value_cents":7390,"currency":"BRL","description":"Pedido PED-000123 · delivery · pix · Total R$ 73,90","custom_fields":{"pedido":{"order_id":"PED-000123","value":73.9,"delivery_type":"delivery","subtotal":68.9,"shipping":5.0,"discount":0.0,"payment_method":"pix","coupon":"PROMO10","items":[{"item_id":"pz-calabresa-g","item_name":"Calabresa G","price":59.9,"quantity":1,"category":"Pizzas"},{"item_id":"bb-guarana-2l","item_name":"Guaraná 2L","price":9.0,"quantity":1,"category":"Bebidas"}]},"id_pedido_cardapio":"PED-000123","tipo_entrega":"delivery","subtotal_cents":6890,"frete_cents":500,"desconto_cents":0,"forma_pagamento":"pix","cupom":"PROMO10","itens":"1x Calabresa G (Pizzas) — R$ 59,90\n1x Guaraná 2L (Bebidas) — R$ 9,00"}}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 11b. purchase  2) MOVER  ->  Compras  (etapa de GANHO: encerra o pedido; não mover depois)
+#    Esta loja não exige won_reason.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_compras}}","reason":"purchase"}}}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# 12. cancel  ->  Cancelado  (etapa de PERDA: exige lost_reason; encerra o pedido)
+#    lost_reason aceitos: requested_by_customer, price, no_response, product_unavailable,
+#    cancelled_by_store, cancelled_by_customer, payment_failed, other
+#    Sem lost_reason (ou com valor fora da lista) a ferramenta devolve isError e o pedido NÃO muda.
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_cancelado}}","reason":"cancel","lost_reason":"cancelled_by_customer"}}}'
+
+
+# =====================================================================================================
+# CASOS DE ERRO (para conferir o tratamento no cardápio)
+# =====================================================================================================
+
+# -----------------------------------------------------------------------------------------------------
+# E1. Token inválido  ->  HTTP 401  {"jsonrpc":"2.0","error":{"code":-32001,"message":"Token not recognized."},"id":null}
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer dsk_invalido' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# E2. Sem Accept completo  ->  HTTP 406  "Not Acceptable: Client must accept both application/json and text/event-stream"
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+
+# -----------------------------------------------------------------------------------------------------
+# E3. Cancelado SEM lost_reason  ->  HTTP 200 com result.isError = true
+#     "Informe o motivo da perda: use “Marcar como perdido” no menu do card, que pede o motivo."
+# -----------------------------------------------------------------------------------------------------
+curl --location '{{base_url}}/api/mcp' \
+  --header 'Authorization: Bearer {{mcp_token}}' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"crm_move_lead_stage","arguments":{"lead_id":"{{lead_id}}","to_stage_id":"{{stage_cancelado}}"}}}'
+
+
+# =====================================================================================================
+# SCRIPT DE TESTE DO POSTMAN (opcional) — cole na aba "Tests" de cada requisição
+# Lê o SSE, mostra o JSON e guarda ids em variáveis do Environment.
+# =====================================================================================================
+#
+#   const line = pm.response.text().split("\n").find(l => l.startsWith("data: "));
+#   const msg = line ? JSON.parse(line.slice(6)) : null;
+#   pm.test("HTTP 200", () => pm.response.to.have.status(200));
+#   pm.test("sem erro de ferramenta", () => pm.expect(msg && msg.result && msg.result.isError).to.not.eql(true));
+#   const sc = msg && msg.result && msg.result.structuredContent;
+#   // após crm_list_leads: guarde o pedido do contato
+#   if (sc && sc.leads) {
+#     const alvo = sc.leads.filter(l => l.contact_id === pm.environment.get("contact_id"))
+#                          .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
+#     if (alvo) pm.environment.set("lead_id", alvo.id);
+#   }
+#   console.log(JSON.stringify(sc, null, 2));
