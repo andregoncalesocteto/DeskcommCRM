@@ -190,11 +190,11 @@ Auth por cookie de sessão; `organization_id` sempre do JWT, nunca do corpo.
 |---|---|---|---|---|
 | 1 | Evento de ganho sem `value_path` fecha venda sem valor e não gera conversão de anúncio | Média | Alto (receita invisível) | Aviso na tela; valor gravado antes do movimento; teste com sabotagem da ordem |
 | 2 | Integrador quebra por recusa de nome errado | Média | Médio | `crm_list_pipeline_events`; a mensagem de recusa lista as chaves válidas; recusa por evento |
-| 3 | `actor_kind` do movimento feito por token ou pelo próprio evento sair como `user`, e o flag "respeita movimento manual" travar o fluxo | Média | Alto | Teste de que o movimento do evento sai como `system`; confirmar o ator do token |
+| 3 | `actor_kind` do movimento feito por token ou pelo próprio evento sair como `user`, e o flag "respeita movimento manual" travar o fluxo | Baixa | Baixo | Resolvido na Fase 0 ([respostas](eventos-do-funil-fase-0.md)): token MCP e webhook gravam `system`; um teste trava isso |
 | 4 | O `moveLeadHandler` recusa o ganho por regra do funil (motivo, campo obrigatório) depois de gravar estado e valor | Média | Médio | Resultado explícito `recusado_pelo_funil`; estado e valor permanecem; avisar na tela |
-| 5 | Migration deduplica `crm_lead_activities` e há gatilho ou retenção que impeça o `delete` | Baixa | Alto (update do clone quebra) | Confirmar antes; migration idempotente, testada em `test:db` com dados duplicados |
+| 5 | Migration deduplica `crm_lead_activities` e há gatilho ou retenção que impeça o `delete` | Baixa | Baixo | Resolvido na Fase 0: nenhum gatilho, política ou retenção apaga a tabela; migration idempotente, testada em `test:db` com dados duplicados |
 | 6 | Vazamento entre organizações por filtro esquecido na busca do evento | Baixa | Crítico | RLS + filtro explícito de `organization_id`; invariante de isolamento; sabotagem do filtro |
-| 7 | Dois eventos simultâneos movem o card duas vezes | Baixa | Médio | Atualização de etapa condicional à etapa lida; índice único para o histórico |
+| 7 | Dois eventos simultâneos movem o card duas vezes | Baixa | Médio | O `moveLeadHandler` já condiciona o `update` ao `updated_at` do pedido (`409 lead_stage_changed_concurrent`); índice único para o histórico |
 | 8 | Teto de 30 escritas por minuto estourado em pico | Baixa | Médio | Uma escrita por chamada, qualquer que seja o lote; orientação de lote no guia |
 | 9 | Retenção apaga atividades e o `event_id` volta a ser aceito | Baixa | Baixo | Documentar; aceitável |
 | 10 | Caminho de JSON ambíguo (arrays, tipos) produz valor errado | Baixa | Médio | Só nomes de campo com ponto; valor não finito ou negativo é recusado |
@@ -205,7 +205,7 @@ Auth por cookie de sessão; `organization_id` sempre do JWT, nunca do corpo.
 
 | Fase | Entregas | Prova de pronto |
 |---|---|---|
-| **0. Esclarecimentos** | Responder os pontos da spec: ator dos movimentos, gatilhos/retenção em `crm_lead_activities`, exigência de ator do `moveLeadHandler`, teto do valor | Respostas por teste ou leitura, anotadas na spec |
+| **0. Esclarecimentos** (feita: [respostas](eventos-do-funil-fase-0.md)) | Responder os pontos da spec: ator dos movimentos, gatilhos/retenção em `crm_lead_activities`, exigência de ator do `moveLeadHandler`, espelho de `support_write_*` | Respostas por teste ou leitura, anotadas na spec |
 | **1. Fundação** | Migration em tripla (`crm_pipeline_events`, índice único, dedupe); funções puras em `lib/leads/eventos-do-funil/`; `23505` tratado em `eventos-externos.ts` | Unit + `pnpm test:db` (isolamento, índice, instalação e atualização), com sabotagem |
 | **2. Operação** | `crm_track_event` e `crm_list_pipeline_events`; gates do catálogo, escopo e vocabulário leigo; seção na spec 11 | Unit + prova na stack local com token temporário (sequência de pedido, reenvio, atrasado, desconhecido, movimento manual) |
 | **3. Cadastro** | Rotas `/pipelines/[id]/events`; seção na tela com avisos e sinais de uso | Playwright em banco fresco estilo VPS, com os envs opcionais ausentes |

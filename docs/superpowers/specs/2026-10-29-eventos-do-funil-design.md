@@ -61,8 +61,9 @@ Uma linha por evento cadastrado em um funil.
 
 - **Unicidade:** `unique (pipeline_id, key)`. Índice em `(organization_id, pipeline_id)`.
 - **RLS:** `tenant_isolation_crm_pipeline_events_all` via `fn_user_org_ids()`, no padrão do repositório.
-  Escrita para `manager` ou mais, seguindo o que `crm_stages` já faz (`crm_stages_manager_write`); conferir
-  se as políticas `support_write_*` de `crm_stages` precisam de espelho (suporte temporário).
+  Escrita para `manager` ou mais, seguindo o que `crm_stages` já faz (`crm_stages_manager_write`). As políticas
+  restritivas `support_write_*` **não** se escrevem à mão: `fn_aplicar_travas_de_suporte()` as planta em toda tabela elegível, e a
+  migration termina com `select public.fn_aplicar_travas_de_suporte();` (Fase 0, pergunta 4).
 - **Doutrina DIRC:** a etapa é FK (não texto); o "é compra" é calculado (destino de ganho), não armazenado;
   vocabulário de `value_unit` é pequeno e fechado, então vira `check` (diferente de `crm_lead_activities.type`,
   que é vocabulário aberto).
@@ -136,7 +137,7 @@ Subresultados de um `registrado`:
 `estado` ∈ `aplicado` · `sem_state_key` · `ignorado_antigo` · `ignorado_pedido_encerrado`;
 `valor` ∈ `aplicado` · `sem_campo` · `ignorado_pedido_encerrado`;
 `movimento` ∈ `movido` · `sem_destino` · `ja_na_etapa_ou_adiante` · `respeita_movimento_manual` ·
-`pedido_encerrado` · `etapa_arquivada` · `recusado_pelo_funil` (com a mensagem do funil).
+`pedido_encerrado` · `etapa_arquivada` · `conflito` (outro movimento simultâneo) · `recusado_pelo_funil` (com a mensagem do funil).
 
 ### Algoritmo, por evento, em ordem
 
@@ -167,8 +168,8 @@ queda no meio do caminho se recuperar no reenvio.
 - **Mover para o mesmo lugar** não gera `stage_changed` (diferente do `crm_move_lead_stage`, que gera um evento sem efeito).
 - **Etapa de ganho** passa pelo `moveLeadHandler`, com as regras do funil (motivo de ganho, campos obrigatórios). Se o funil
   recusar, o resultado é `recusado_pelo_funil`, e o estado e o valor já gravados permanecem.
-- **Corrida:** a mudança de etapa é condicional ("só se o pedido ainda está na etapa que li"), para dois eventos simultâneos
-  não gerarem dois movimentos.
+- **Corrida:** o `moveLeadHandler` já condiciona o `update` ao `updated_at` do pedido; o segundo movimento simultâneo recebe
+  `409 lead_stage_changed_concurrent`, que a operação devolve como `movimento: conflito` (Fase 0, pergunta 3).
 
 ### Reuso
 
@@ -257,9 +258,9 @@ Esta etapa **não** passa por agente de IA; a regra do par (DoD 12) não se apli
 
 ## Riscos e pontos a confirmar na implementação
 
-1. `actor_kind` das mudanças de etapa feitas por token MCP e pelo próprio evento: confirmar por teste que não saem como `user`.
-2. Existência de gatilho ou retenção que impeça a deduplicação por `delete` em `crm_lead_activities`.
-3. Se o `moveLeadHandler` exige ator do tipo usuário em alguma regra de funil.
+1. ~~`actor_kind` das mudanças de etapa por token MCP~~: respondido na Fase 0, grava `system`; falta o teste que trava isso.
+2. ~~Gatilho ou retenção que impeça o `delete`~~: respondido na Fase 0, nada impede.
+3. ~~Ator do `moveLeadHandler`~~: respondido na Fase 0, nenhuma regra de funil exige ator humano.
 4. Retenção das atividades: apagada a atividade, o `event_id` pode voltar a ser aceito. Aceitável, mas deve constar na documentação.
 5. Cadastro com `state_key` repetido entre dois eventos do mesmo funil (o último escreve): permitir ou bloquear. Proposta: avisar.
 6. O teto do valor da venda: fixo no código (proposta: R$ 1.000.000,00) ou por organização.
