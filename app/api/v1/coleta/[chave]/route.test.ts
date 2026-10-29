@@ -24,6 +24,7 @@ vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/tracker/identificar-pedido", () => ({ identificarPedido: vi.fn() }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
+const OUTRA_ORG = "33333333-3333-4333-8333-333333333333";
 const FUNIL = "44444444-4444-4444-8444-444444444444";
 const PEDIDO = "77777777-7777-4777-8777-777777777777";
 const CHAVE = `pk_${"a1".repeat(18)}`;
@@ -36,6 +37,12 @@ function tabelas() {
     crm_tracker_public_keys: [
       { id: "k1", public_key: CHAVE, is_active: true, revoked_at: null, ...base },
       { id: "k2", public_key: CHAVE_REVOGADA, is_active: false, revoked_at: "2026-10-01T00:00:00Z", ...base },
+    ] as Linha[],
+    crm_pipeline_events: [
+      { organization_id: ORG, pipeline_id: FUNIL, key: "purchase", is_active: true },
+      { organization_id: ORG, pipeline_id: FUNIL, key: "page_view", is_active: true },
+      { organization_id: ORG, pipeline_id: FUNIL, key: "antigo", is_active: false },
+      { organization_id: OUTRA_ORG, pipeline_id: FUNIL, key: "da_outra_org", is_active: true },
     ] as Linha[],
   };
 }
@@ -269,5 +276,29 @@ describe("a resposta não vaza e não varia com o pedido", () => {
     const j = await (await post(corpo())).json();
     expect(j.data.eventos[0].resultado).toBe("recebido");
     expect(JSON.stringify(j)).not.toContain("evento_nao_cadastrado");
+  });
+});
+
+describe("modo de depuração: a lista de nomes de evento cadastrados", () => {
+  it("⭐ com debug, a resposta traz SÓ os nomes ativos do funil da chave, em ordem", async () => {
+    const j = await (await post(corpo({ debug: true }))).json();
+    expect(j.data.chaves_cadastradas).toEqual(["page_view", "purchase"]);
+  });
+
+  it("sem debug o campo não existe", async () => {
+    const j = await (await post(corpo())).json();
+    expect(j.data).not.toHaveProperty("chaves_cadastradas");
+  });
+
+  it("⭐ a lista é a mesma com idtrack bom e com idtrack que não acha pedido (não revela nada do contato)", async () => {
+    vi.mocked(identificarPedido).mockResolvedValue(PEDIDO);
+    const bom = await (await post(corpo({ debug: true }))).json();
+    vi.mocked(identificarPedido).mockResolvedValue(null);
+    const ruim = await (await post(corpo({ debug: true, idtrack: "nada" }))).json();
+    expect(ruim).toEqual(bom);
+  });
+
+  it("debug que não é booleano é recusado", async () => {
+    expect((await post(corpo({ debug: "sim" }))).status).toBe(422);
   });
 });

@@ -25,6 +25,8 @@ export const FORMATO_DA_CHAVE = /^pk_[a-f0-9]{36}$/;
 export const corpoDaColetaSchema = z.strictObject({
   /** O id do contato que a página recebeu na URL (`?idtrack=`). Opcional; sem ele nada é identificado. */
   idtrack: z.string().max(200).optional(),
+  /** Modo de depuração do script: a resposta traz as chaves de evento cadastradas no funil (nada além disso). */
+  debug: z.boolean().optional(),
   events: z.array(eventoDoFunilSchema).min(1).max(MAX_EVENTOS_DO_NAVEGADOR),
 });
 export type CorpoDaColeta = z.infer<typeof corpoDaColetaSchema>;
@@ -82,4 +84,21 @@ export function cabecalhosDeCors(origem: string): Record<string, string> {
 export function segundosAteAJanelaAcabar(agora = Date.now()): number {
   const janelaMs = JANELA_DO_LIMITE_SEGUNDOS * 1000;
   return Math.max(1, Math.ceil((janelaMs - (agora % janelaMs)) / 1000));
+}
+
+/**
+ * As chaves de evento ATIVAS do funil da chave, em ordem — só os NOMES (nem etapa, nem valor, nem regra). Existe para o
+ * modo de depuração do script avisar "este evento não está cadastrado". Independe do pedido: é a mesma lista com
+ * `idtrack` bom, ruim ou ausente, então não revela nada do contato.
+ */
+export async function chavesCadastradas(supabase: SupabaseClient, chave: ChaveDaColeta): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("crm_pipeline_events")
+    .select("key")
+    .eq("organization_id", chave.organizationId)
+    .eq("pipeline_id", chave.pipelineId)
+    .eq("is_active", true)
+    .order("key");
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<{ key: string }>).map((l) => l.key);
 }

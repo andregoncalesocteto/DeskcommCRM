@@ -246,3 +246,14 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - Defesa do navegador = limitar o estrago, não impedir a fraude: uma compra forjada COM carrinho forjado fecha o pedido. Documentar isso na US-030 (cancelar e valor definitivo continuam do servidor).
 ---
+
+## 2026-10-29 - US-026 e US-027 (um commit: é um arquivo só)
+- `public/deskcomm-rastreador.js` (ES5, sem dependência, escrito à mão): `deskcomm('init'|'track'|'optOut'|'optIn'|'flush', …)` e os mesmos como métodos; as chamadas feitas antes do arquivo carregar (fila `q` do trecho de instalação) são executadas. Sem observação automática, sem dataLayer, sem listener de clique (testado SEM os comentários, que citam o dataLayer para dizer que não o leem). `.js` em public/ não passa pelo proxy (matcher exclui).
+- Fila: `event_id` UUID na criação, mantido até a confirmação; lote de até 20 a cada 3 s (20 acumulados saem na hora); teto 200; `text/plain` (sem preflight), `credentials: omit`, chave só no caminho; pagehide/visibilitychange → sendBeacon (fallback fetch keepalive). Reenvia rede/5xx/429 (respeita Retry-After, espera crescente até 60 s, desiste após 5 falhas); qualquer outro 4xx é definitivo e não reenvia.
+- idtrack: UUID na URL → sessionStorage (minúsculas); sem idtrack válido, NADA é enviado. `storage:false` não guarda nada; `optOut` apaga o idtrack e grava `deskcomm_optout` no localStorage (a escolha vale nas páginas seguintes), `optIn` desfaz. Privacidade: remove por CHAVE (phone, telefone, email, name, nome, cpf… exatos, `item_name` fica) em qualquer profundidade e valores com cara de e-mail.
+- Depuração: `init({debug:true})` manda `debug:true`; a porta (agora) devolve `chaves_cadastradas` (SÓ nomes de evento ativos do funil da chave, mesma lista para qualquer idtrack) e o script avisa no console, uma vez por chave, o evento não cadastrado. Isto alterou a US-023 de forma controlada: sem `debug`, o corpo segue idêntico.
+- Testes: 46 (script, relógio falso) + 4 novos na rota (36). Sabotagens: A (4xx vira reenvio) 4 vermelhos (previsto 4); B (sem filtro pessoal) 1 (previsto 1); C (sem validar UUID da URL) 6 (previsto 6).
+- **Learnings for future iterations:**
+  - ESLint reclama de `catch (e)` sem uso e NÃO aceita `_e` em catch: usar `catch {` (binding opcional).
+  - Testar script de navegador: `new Function("window", FONTE)(windowFalsa)` + relógio falso do vitest; o arquivo precisa terminar em `})(window);`.
+---

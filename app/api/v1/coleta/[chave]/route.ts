@@ -27,6 +27,7 @@ import {
   LIMITE_POR_IP_POR_MINUTO,
   MAX_BYTES_DO_CORPO,
   cabecalhosDeCors,
+  chavesCadastradas,
   corpoDaColetaSchema,
   origemPermitida,
   resolverChave,
@@ -119,8 +120,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
 
   // A mesma forma sempre: o navegador não aprende se o idtrack existia, se havia pedido nem o que o funil decidiu.
-  return ok(
-    { eventos: corpo.events.map((e) => ({ event_id: e.event_id, resultado: "recebido" })) },
-    { requestId, headers: cors },
-  );
+  // Só no modo de depuração entra a lista de NOMES de evento cadastrados — igual para qualquer idtrack.
+  const eventos = corpo.events.map((e) => ({ event_id: e.event_id, resultado: "recebido" }));
+  if (corpo.debug !== true) return ok({ eventos }, { requestId, headers: cors });
+  try {
+    return ok({ eventos, chaves_cadastradas: await chavesCadastradas(admin, chave) }, { requestId, headers: cors });
+  } catch {
+    return ok({ eventos }, { requestId, headers: cors });
+  }
 }
