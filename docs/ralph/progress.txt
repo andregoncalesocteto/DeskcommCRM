@@ -60,3 +60,11 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `1.005 * 100 === 100.49999999999999`: valor em reais deve ser lido como texto decimal, não multiplicado.
   - O limite "sem teto" é decisão do dono; o único limite é Number.isSafeInteger (R$ 90 trilhões).
 ---
+
+## 2026-10-29 - US-007
+- lib/leads/eventos-do-funil/decisao-de-movimento.ts: decidirMovimento (precedência: sem_destino, pedido_encerrado, etapa_arquivada, ja_na_etapa_ou_adiante, respeita_movimento_manual, movido) e estadoDevePrevalecer (igual ou mais novo prevalece). Regra de não retroceder: só trava quando a etapa atual está no conjunto de destinos dos eventos ativos; fora dele (Conversas, Chamar humano) o pedido segue.
+- tests/unit/eventos-do-funil-decisao-de-movimento.test.ts (30 casos). Sabotagem A ('maior' → 'maior ou igual'): 1 vermelho, previsto 1. Sabotagem B (ignorar o ator): 12 vermelhos, previsto 6 (errei: o helper de teste usa ator 'system' com o flag ligado, então todo caso 'movido' passa a cair em respeita_movimento_manual).
+- **Learnings for future iterations:**
+  - Ao prever contagem de sabotagem, olhar os padrões do helper de teste: um padrão que depende da linha sabotada multiplica os vermelhos.
+  - A decisão já cobre o que a US-010 precisa; a operação só precisa montar a EntradaDoMovimento (etapa atual, conjunto M, ator do último stage_changed).
+---
