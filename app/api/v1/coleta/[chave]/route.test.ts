@@ -116,7 +116,7 @@ describe("POST", () => {
     expect(registrarEventosDoFunil).toHaveBeenCalledTimes(1);
     const entrada = vi.mocked(registrarEventosDoFunil).mock.calls[0]![1];
     expect(entrada).toMatchObject({
-      organizationId: ORG, leadId: PEDIDO, actor: { type: "webhook_source", id: "k1" }, eventos,
+      organizationId: ORG, leadId: PEDIDO, actor: { type: "webhook_source", id: "k1" }, eventos, origem: "navegador",
     });
     expect(vi.mocked(identificarPedido).mock.calls[0]![1]).toMatchObject({ organizationId: ORG, pipelineId: FUNIL });
   });

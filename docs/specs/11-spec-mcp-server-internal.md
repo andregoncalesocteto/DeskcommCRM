@@ -335,7 +335,8 @@ inputSchema: z.object({
 - **Efeito no pedido** (`registrado`, e `repetido` quando o `event_id` já estava gravado e foi reaplicado):
   `estado` (`aplicado`, `sem_state_key`, `ignorado_antigo`, `ignorado_pedido_encerrado`), `valor` (`aplicado`,
   `sem_campo`, `ignorado_pedido_encerrado`) e `movimento` (`movido`, `sem_destino`, `ja_na_etapa_ou_adiante`,
-  `respeita_movimento_manual`, `pedido_encerrado`, `etapa_arquivada`, `conflito`, `recusado_pelo_funil`), com `etapa`
+  `respeita_movimento_manual`, `pedido_encerrado`, `etapa_arquivada`, `conflito`, `recusado_pelo_funil`; e, só para evento da porta pública do rastreador, `navegador_sem_estado_anterior` e
+  `navegador_nao_perde`), com `etapa`
   (o nome) quando o card se moveu.
 - **Ordem**: histórico (`external_event` com `performed_at` = hora do evento) → estado e valor numa só atualização do
   pedido (`updateLeadHandler`) → movimento (`moveLeadHandler`). O histórico é a fonte de verdade; `custom_fields` e

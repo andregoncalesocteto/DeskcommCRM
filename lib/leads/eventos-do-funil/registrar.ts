@@ -89,7 +89,14 @@ export type SituacaoDoEstado = "aplicado" | "sem_state_key" | "ignorado_antigo" 
 export type SituacaoDoValor = "aplicado" | "sem_campo" | "ignorado_pedido_encerrado";
 
 /** O que aconteceu com a etapa do card: a decisão pura, mais as duas saídas que só o funil e a corrida produzem. */
-export type SituacaoDoMovimento = DecisaoDeMovimento | "conflito" | "recusado_pelo_funil";
+export type SituacaoDoMovimento =
+  | DecisaoDeMovimento
+  | "conflito"
+  | "recusado_pelo_funil"
+  // Só para evento vindo do NAVEGADOR (porta pública, ver `origem`): a compra que fecharia o pedido sem nenhum evento de
+  // estado antes (carrinho, revisão…), e qualquer destino de perda. O evento é registrado; o card não se move.
+  | "navegador_sem_estado_anterior"
+  | "navegador_nao_perde";
 
 /** O que o evento fez no pedido (a parte que existe quando ele foi processado). */
 interface EfeitoNoPedido {
@@ -119,6 +126,11 @@ export interface RegistrarEventosDoFunilInput {
   leadId: string;
   actor: Actor;
   eventos: readonly EventoDoFunil[];
+  /**
+   * De onde o evento veio, quando NÃO é uma integração de servidor. `"navegador"` (porta pública do rastreador) liga as
+   * travas de confiança — o navegador é do visitante, não nosso — e é gravado no histórico como `payload.origem`.
+   */
+  origem?: "navegador";
   /** Só para o teste. Em produção é a hora do servidor. */
   agora?: Date;
 }
@@ -309,6 +321,7 @@ export async function registrarEventosDoFunil(
           event: evento.event,
           at: c.quando,
           event_id: evento.event_id,
+          ...(input.origem ? { origem: input.origem } : {}),
           ...(evento.data ? { data: evento.data } : {}),
         },
       }),
@@ -337,7 +350,7 @@ export async function registrarEventosDoFunil(
   for (const c of [...aGravar.map((g) => g.candidato), ...jaEstavaGravado].sort((a, b) => a.indice - b.indice)) {
     const encerrado = doPedido.status === "won" || doPedido.status === "lost";
     const aplicado = await aplicarAoPedido(supabase, input, c, encerrado, instantes, requestId);
-    const movido = await moverPeloEvento(supabase, input, c, doPedido, destinosDoFunil, requestId);
+    const movido = await moverPeloEvento(supabase, input, c, doPedido, destinosDoFunil, cadastro, requestId);
     resultados[c.indice] = {
       event: c.evento.event,
       event_id: c.evento.event_id,
@@ -528,6 +541,7 @@ async function moverPeloEvento(
   c: Candidato,
   doPedido: EstadoDoPedido,
   destinosDoFunil: ReadonlySet<string>,
+  cadastro: ReadonlyMap<string, EventoCadastrado>,
   requestId: string,
 ): Promise<Movimento> {
   const destinoId = c.cadastrado.stage_id;
@@ -556,6 +570,11 @@ async function moverPeloEvento(
   });
   if (decisao !== "movido" || !destino) return { movimento: decisao };
 
+  if (input.origem === "navegador") {
+    const barrado = await travaDoNavegador(supabase, input, c, destino, cadastro, doPedido.etapas, requestId);
+    if (barrado) return barrado;
+  }
+
   try {
     await moveLeadHandler(
       supabase,
@@ -577,4 +596,58 @@ async function moverPeloEvento(
   doPedido.atorDoUltimoMovimento = actorParaAtividade(input.actor).kind;
   if (destino.is_won) doPedido.status = "won";
   return { movimento: "movido", etapa: destino.name };
+}
+
+/**
+ * As travas de confiança do evento que vem do NAVEGADOR. O script roda na máquina do visitante, que pode forjar o que
+ * quiser; estas regras limitam o estrago de uma compra forjada sem proibir a compra legítima:
+ *  · nada vindo do navegador move o card para uma etapa de PERDA (cancelar é do servidor, com token);
+ *  · uma etapa de GANHO só fecha o pedido se o pedido já registrou antes um evento de ESTADO (carrinho, revisão…).
+ *    Conta só evento que guarda estado e que NÃO leva a uma etapa de ganho ou perda: a compra recusada ontem não
+ *    habilita a compra de hoje.
+ * Barrado, o evento já está no histórico (a ordem é gravar antes de mover) e o resultado diz por quê.
+ */
+async function travaDoNavegador(
+  supabase: SupabaseClient,
+  input: RegistrarEventosDoFunilInput,
+  c: Candidato,
+  destino: EtapaConhecida,
+  cadastro: ReadonlyMap<string, EventoCadastrado>,
+  etapas: ReadonlyMap<string, EtapaConhecida>,
+  requestId: string,
+): Promise<Movimento | null> {
+  if (destino.is_lost) {
+    return {
+      movimento: "navegador_nao_perde",
+      mensagem_do_movimento: "Evento do navegador não move o pedido para uma etapa de perda; cancelar é pelo servidor, com token.",
+    };
+  }
+  if (!destino.is_won) return null;
+
+  const chavesDeEstado = [...cadastro.values()]
+    .filter((e) => e.is_active && e.state_key)
+    .filter((e) => {
+      const etapa = e.stage_id ? etapas.get(e.stage_id) : undefined;
+      return !etapa?.is_won && !etapa?.is_lost;
+    })
+    .map((e) => e.key);
+  if (chavesDeEstado.length > 0) {
+    const { data, error } = await supabase
+      .from("crm_lead_activities")
+      .select("payload")
+      .eq("organization_id", input.organizationId)
+      .eq("lead_id", input.leadId)
+      .eq("type", TIPO_DO_EVENTO_EXTERNO)
+      .in("payload->>event", chavesDeEstado);
+    if (error) throw new ApiError(500, "internal_error", undefined, requestId, `Não consegui ler o histórico do pedido: ${error.message}`);
+    const anteriores = ((data ?? []) as Array<{ payload?: { event_id?: string } }>).filter(
+      (l) => l.payload?.event_id !== c.evento.event_id,
+    );
+    if (anteriores.length > 0) return null;
+  }
+  return {
+    movimento: "navegador_sem_estado_anterior",
+    mensagem_do_movimento:
+      "O navegador só fecha o pedido depois de um evento de estado (carrinho, revisão…); este evento foi registrado e o pedido não se moveu.",
+  };
 }

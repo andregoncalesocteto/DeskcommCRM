@@ -236,3 +236,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - `contacts` tem is_personal/is_anonymized/is_blocked; `crm_leads` tem status text ('open'|'won'|'lost'), contact_id, last_activity_at, created_at.
 ---
+
+## 2026-10-29 - US-025
+- `registrarEventosDoFunil` ganhou `origem?: "navegador"`: gravada em `payload.origem` do histórico e liga `travaDoNavegador` DEPOIS de `decidirMovimento` dizer "movido": (a) destino de PERDA → `navegador_nao_perde`; (b) destino de GANHO só fecha se o histórico do pedido já tiver ao menos um evento de ESTADO (cadastro ativo com state_key cuja etapa de destino não é de ganho nem de perda), senão `navegador_sem_estado_anterior` — o evento fica registrado e o resultado traz a mensagem. A porta pública passa `origem: "navegador"`.
+- Detalhe que importa: a compra recusada NÃO conta como estado para a próxima (compra tem state_key `pedido`, mas leva a etapa de ganho, então fica fora da lista). Sem isso, mandar a compra duas vezes fechava o pedido.
+- "Uma compra por pedido" e "pedido encerrado só registra" já vinham de `dedupe_path` e de `decidirMovimento`: apenas provados nos testes novos.
+- 9 casos novos (70 no arquivo). Sabotagens: remover a trava de sequência → 2 vermelhos (previsto 2); desligar a de perda → 1 vermelho (previsto 1). Spec 11 atualizada com os dois valores novos de `movimento`.
+- Limite assumido e declarado: o "antes" é "existe no histórico do pedido", não por hora do evento (o navegador controla `at`).
+- **Learnings for future iterations:**
+  - Defesa do navegador = limitar o estrago, não impedir a fraude: uma compra forjada COM carrinho forjado fecha o pedido. Documentar isso na US-030 (cancelar e valor definitivo continuam do servidor).
+---

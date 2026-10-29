@@ -721,3 +721,104 @@ describe("movimento: as recusas e a corrida", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// as travas de confiança do evento que vem do NAVEGADOR (porta pública do rastreador)
+// ---------------------------------------------------------------------------
+
+describe("⭐ travas de confiança: evento vindo do navegador", () => {
+  const doNavegador = (client: unknown, eventos: EventoDoFunil[]) =>
+    registrarEventosDoFunil(client as never, {
+      organizationId: ORG_A, leadId: LEAD, actor: { type: "webhook_source", id: "k1" }, eventos, agora: AGORA, origem: "navegador",
+    });
+  const carrinhoAntes = (): Linha => ({
+    organization_id: ORG_A, lead_id: LEAD, type: "external_event", performed_at: hora(1),
+    payload: { event: "cart_sync", event_id: "c0", at: hora(1), origem: "navegador" },
+  });
+  const compra = (id: string, order = "P-1") => ev("purchase", id, { at: hora(10), data: { value: 50, order_id: order } });
+
+  it("todo evento do navegador é gravado com origem 'navegador'; o de servidor não leva a marca", async () => {
+    const a = bancoFalso(tabelasDoCardapio());
+    await doNavegador(a.client, [ev("page_view", "1")]);
+    expect(a.inseridos[0]!.payload).toMatchObject({ event: "page_view", origem: "navegador" });
+    const b = bancoFalso(tabelasDoCardapio());
+    await chamar(b.client, [ev("page_view", "1")]);
+    expect(b.inseridos[0]!.payload).not.toHaveProperty("origem");
+  });
+
+  it("⭐ compra do navegador SEM evento de estado antes: registrada, estado e valor gravados, o pedido NÃO fecha", async () => {
+    const { client, inseridos } = bancoFalso(tabelasDoCardapio());
+    const r = await doNavegador(client, [compra("5")]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", movimento: "navegador_sem_estado_anterior" });
+    expect((r.resultados[0] as { mensagem_do_movimento?: string }).mensagem_do_movimento).toContain("estado");
+    expect(inseridos).toHaveLength(1);
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("a mesma compra pelo SERVIDOR (token) fecha sem carrinho: a trava é só do navegador", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio());
+    const r = await chamar(client, [compra("5")]);
+    expect(movimentoDe(r, 0)).toBe("movido");
+    expect(destinosChamados()).toEqual(["st-comp"]);
+  });
+
+  it("compra do navegador DEPOIS de um carrinho no histórico: fecha", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ atividades: [carrinhoAntes()] }));
+    const r = await doNavegador(client, [compra("5")]);
+    expect(movimentoDe(r, 0)).toBe("movido");
+    expect(destinosChamados()).toEqual(["st-comp"]);
+  });
+
+  it("carrinho e compra no MESMO lote do navegador: fecha (o carrinho já está no histórico quando a compra é decidida)", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio());
+    const r = await doNavegador(client, [ev("cart_sync", "3", { at: hora(3), data: { items: [{ item_id: "x" }] } }), compra("5")]);
+    expect(r.resultados.map((x) => (x as { movimento: string }).movimento)).toEqual(["movido", "movido"]);
+    expect(destinosChamados()).toEqual(["st-car", "st-comp"]);
+  });
+
+  it("⭐ a compra recusada ontem NÃO habilita a de hoje: o histórico da própria compra não conta como estado", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio());
+    const primeira = await doNavegador(client, [compra("5", "P-1")]);
+    const segunda = await doNavegador(client, [compra("6", "P-2")]);
+    expect(movimentoDe(primeira, 0)).toBe("navegador_sem_estado_anterior");
+    expect(movimentoDe(segunda, 0)).toBe("navegador_sem_estado_anterior");
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("⭐ compra duplicada: o mesmo order_id com outro event_id é repetição e não faz mais nada", async () => {
+    const cadastros = FUNIL_DO_CARDAPIO.map((c) => (c.key === "purchase" ? { ...c, dedupe_path: "order_id" } : c));
+    const { client, inseridos } = bancoFalso(tabelasDoCardapio({ cadastros, atividades: [carrinhoAntes()] }));
+    const primeira = await doNavegador(client, [compra("5", "P-1")]);
+    expect(movimentoDe(primeira, 0)).toBe("movido");
+    const segunda = await doNavegador(client, [compra("6", "P-1")]);
+    expect(segunda.resultados[0]).toEqual({ event: "purchase", event_id: "6", resultado: "repetido" });
+    expect(inseridos).toHaveLength(1);
+    expect(movimentos).toHaveBeenCalledTimes(1);
+  });
+
+  it("pedido já encerrado: a compra do navegador só registra", async () => {
+    const { client, inseridos } = bancoFalso(tabelasDoCardapio({ status: "won", atividades: [carrinhoAntes()] }));
+    const r = await doNavegador(client, [compra("5")]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", movimento: "pedido_encerrado", estado: "ignorado_pedido_encerrado" });
+    expect(inseridos).toHaveLength(1);
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("⭐ nada vindo do navegador move para etapa de perda; o servidor move", async () => {
+    const etapas = [...ETAPAS, { id: "st-perd", name: "Cancelado", position: 6000, is_archived: false, is_won: false, is_lost: true, organization_id: ORG_A, pipeline_id: FUNIL }];
+    const cadastros = [...FUNIL_DO_CARDAPIO, cadastro("cancel", { stage_id: "st-perd" })];
+    const doNav = bancoFalso(tabelasDoCardapio({ etapas, cadastros }));
+    const r = await doNavegador(doNav.client, [ev("cancel", "9")]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", movimento: "navegador_nao_perde" });
+    expect(movimentos).not.toHaveBeenCalled();
+    const doServidor = bancoFalso(tabelasDoCardapio({ etapas, cadastros }));
+    expect(movimentoDe(await chamar(doServidor.client, [ev("cancel", "9")]), 0)).toBe("movido");
+  });
+
+  it("evento do navegador para etapa que não é de ganho nem de perda anda normalmente", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio());
+    const r = await doNavegador(client, [ev("page_view", "1")]);
+    expect(movimentoDe(r, 0)).toBe("movido");
+    expect(destinosChamados()).toEqual(["st-vis"]);
+  });
+});
