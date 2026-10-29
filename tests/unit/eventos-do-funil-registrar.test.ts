@@ -22,12 +22,18 @@ import { allTools } from "@/lib/mcp/tools";
 
 // A atualização do pedido é do handler de leads (merge atômico, auditoria): aqui ele é um espião.
 const atualizacoes = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => ({})));
+const movimentos = vi.hoisted(() => vi.fn(async (..._args: unknown[]): Promise<unknown> => ({})));
 vi.mock("@/app/api/v1/leads/_handler", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   updateLeadHandler: atualizacoes,
+  moveLeadHandler: movimentos,
 }));
 
-beforeEach(() => atualizacoes.mockClear());
+beforeEach(() => {
+  atualizacoes.mockClear();
+  movimentos.mockReset();
+  movimentos.mockResolvedValue({});
+});
 
 const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -57,8 +63,18 @@ function bancoFalso(
   const from = (tabela: string) => {
     const filtros: Array<[string, unknown]> = [];
     let emIn: [string, unknown[]] | null = null;
+    let ordem: { coluna: string; crescente: boolean } | null = null;
+    let teto: number | null = null;
     const construtor = {
       select: () => construtor,
+      order: (coluna: string, opcoes?: { ascending?: boolean }) => {
+        ordem = { coluna, crescente: opcoes?.ascending !== false };
+        return construtor;
+      },
+      limit: (n: number) => {
+        teto = n;
+        return construtor;
+      },
       eq: (coluna: string, valor: unknown) => {
         filtros.push([coluna, valor]);
         return construtor;
@@ -87,7 +103,14 @@ function bancoFalso(
               return valores.includes(valorDa(l, coluna));
             })
           : todas;
-        return resolve({ data: filtradas, error: null });
+        const ordenadas = ordem
+          ? [...filtradas].sort((a, b) => {
+              const { coluna, crescente } = ordem as { coluna: string; crescente: boolean };
+              const x = String(a[coluna]), y = String(b[coluna]);
+              return (x < y ? -1 : x > y ? 1 : 0) * (crescente ? 1 : -1);
+            })
+          : filtradas;
+        return resolve({ data: teto === null ? ordenadas : ordenadas.slice(0, teto), error: null });
       },
     };
     return construtor;
@@ -378,7 +401,9 @@ describe("repetição de negócio (dedupe_path)", () => {
       tabelasCom([COMPRA], { atividades: [atividade("purchase", "p1", hora(0), { order_id: "PED-1", value: 73.9 })] }),
     );
     const r = await chamar(client, [ev("purchase", "p1", { at: hora(0), data: { order_id: "PED-1", value: 73.9 } })]);
-    expect(r.resultados[0]).toEqual({ event: "purchase", event_id: "p1", resultado: "repetido", estado: "aplicado", valor: "aplicado" });
+    expect(r.resultados[0]).toEqual({
+      event: "purchase", event_id: "p1", resultado: "repetido", estado: "aplicado", valor: "aplicado", movimento: "sem_destino",
+    });
     expect(inseridos).toHaveLength(0); // não gravou de novo
     expect(ultimaAtualizacao()[3]).toEqual({ custom_fields: { pedido: { order_id: "PED-1", value: 73.9 } }, value_cents: 7390 });
   });
@@ -505,6 +530,194 @@ describe("pedido encerrado", () => {
     expect(r.resultados[1]).toMatchObject({ resultado: "registrado", estado: "ignorado_pedido_encerrado", valor: "ignorado_pedido_encerrado" });
     expect(inseridos).toHaveLength(2);
     expect(atualizacoes).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// o movimento da etapa
+// ---------------------------------------------------------------------------
+
+const ETAPAS: Linha[] = [
+  { id: "st-conv", name: "Conversas", position: 1000, is_archived: false, is_won: false, is_lost: false },
+  { id: "st-vis", name: "Visitas", position: 2000, is_archived: false, is_won: false, is_lost: false },
+  { id: "st-visu", name: "Visualizações", position: 2500, is_archived: false, is_won: false, is_lost: false },
+  { id: "st-car", name: "Carrinho", position: 2750, is_archived: false, is_won: false, is_lost: false },
+  { id: "st-rev", name: "Revisão", position: 2875, is_archived: false, is_won: false, is_lost: false },
+  { id: "st-comp", name: "Compras", position: 3000, is_archived: false, is_won: true, is_lost: false },
+  { id: "st-hum", name: "Chamar humano", position: 5500, is_archived: false, is_won: false, is_lost: false },
+  { id: "st-arq", name: "Arquivada", position: 4000, is_archived: true, is_won: false, is_lost: false },
+].map((e) => ({ ...e, organization_id: ORG_A, pipeline_id: FUNIL }));
+
+const FUNIL_DO_CARDAPIO = [
+  cadastro("page_view", { stage_id: "st-vis" }),
+  cadastro("view_item", { stage_id: "st-visu" }),
+  cadastro("cart_sync", { stage_id: "st-car", state_key: "cart" }),
+  cadastro("begin_checkout", { stage_id: "st-rev" }),
+  cadastro("purchase", { stage_id: "st-comp", respects_manual_move: false, state_key: "pedido", value_path: "value", value_unit: "reais" }),
+];
+// Os cadastros acima não declaram `respects_manual_move`: o padrão da tabela é verdadeiro.
+for (const c of FUNIL_DO_CARDAPIO) c.respects_manual_move ??= true;
+
+function tabelasDoCardapio(extra: { etapa?: string; status?: string; atividades?: Linha[]; cadastros?: Linha[]; etapas?: Linha[] } = {}) {
+  const t = tabelasCom(extra.cadastros ?? FUNIL_DO_CARDAPIO, { status: extra.status, atividades: extra.atividades });
+  (t.crm_leads[0] as Linha).stage_id = extra.etapa ?? "st-conv";
+  return { ...t, crm_stages: extra.etapas ?? ETAPAS };
+}
+const movimentoManual = (quem: string): Linha => ({
+  organization_id: ORG_A, lead_id: LEAD, type: "stage_changed", actor_kind: quem, performed_at: hora(1),
+});
+const destinosChamados = () => movimentos.mock.calls.map((c) => (c[3] as { to_stage_id: string }).to_stage_id);
+const movimentoDe = (r: { resultados: unknown[] }, i: number) => (r.resultados[i] as { movimento: string }).movimento;
+
+describe("movimento: o card avança pelo cadastro e nunca retrocede", () => {
+  it("⭐ a sequência page_view → view_item → cart_sync → begin_checkout → purchase termina em Compras", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio());
+    const r = await chamar(client, [
+      ev("page_view", "1", { at: hora(1) }),
+      ev("view_item", "2", { at: hora(2) }),
+      ev("cart_sync", "3", { at: hora(3), data: { items: [{ item_id: "x" }] } }),
+      ev("begin_checkout", "4", { at: hora(4) }),
+      ev("purchase", "5", { at: hora(5), data: { value: 68.9 } }),
+    ]);
+    expect(destinosChamados()).toEqual(["st-vis", "st-visu", "st-car", "st-rev", "st-comp"]);
+    expect(r.resultados.map((x) => (x as { etapa?: string }).etapa)).toEqual(["Visitas", "Visualizações", "Carrinho", "Revisão", "Compras"]);
+    expect(r.resultados.every((x) => (x as { movimento: string }).movimento === "movido")).toBe(true);
+    expect(movimentos.mock.calls[0]![2]).toBe(LEAD);
+    expect(movimentos.mock.calls[0]![1]).toMatchObject({ organization_id: ORG_A, actor: ATOR });
+  });
+
+  it("evento de nível menor depois NÃO retrocede: o card em Revisão fica em Revisão", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-rev" }));
+    const r = await chamar(client, [ev("page_view", "1"), ev("view_item", "2")]);
+    expect(r.resultados.map((x) => (x as { movimento: string }).movimento)).toEqual(["ja_na_etapa_ou_adiante", "ja_na_etapa_ou_adiante"]);
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("mover para a etapa em que o card já está não chama o handler (não gera stage_changed)", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-vis" }));
+    const r = await chamar(client, [ev("page_view", "1")]);
+    expect(movimentoDe(r, 0)).toBe("ja_na_etapa_ou_adiante");
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("⭐ o desvio por 'Chamar humano' (fora do mapa, depois na ordem do quadro) não trava a compra", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-hum" }));
+    const r = await chamar(client, [ev("purchase", "5", { data: { value: 10 } })]);
+    expect(movimentoDe(r, 0)).toBe("movido");
+    expect(destinosChamados()).toEqual(["st-comp"]);
+  });
+
+  it("evento sem etapa de destino só registra", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ cadastros: [cadastro("page_view")] }));
+    const r = await chamar(client, [ev("page_view", "1")]);
+    expect(movimentoDe(r, 0)).toBe("sem_destino");
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("etapa de destino arquivada: só registra", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ cadastros: [cadastro("page_view", { stage_id: "st-arq" })] }));
+    const r = await chamar(client, [ev("page_view", "1")]);
+    expect(movimentoDe(r, 0)).toBe("etapa_arquivada");
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("pedido encerrado não se move", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ status: "lost" }));
+    const r = await chamar(client, [ev("page_view", "1")]);
+    expect(movimentoDe(r, 0)).toBe("pedido_encerrado");
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("um movimento que fecha o pedido vale para os eventos seguintes do MESMO lote", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-car" }));
+    const r = await chamar(client, [ev("purchase", "5", { at: hora(5), data: { value: 10 } }), ev("page_view", "6", { at: hora(6) })]);
+    expect(r.resultados.map((x) => (x as { movimento: string }).movimento)).toEqual(["movido", "pedido_encerrado"]);
+    expect(movimentos).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("movimento: respeitar a equipe", () => {
+  it("⭐ último movimento de uma PESSOA e flag ligado: registra, grava estado e valor, e não move", async () => {
+    const { client, inseridos } = bancoFalso(tabelasDoCardapio({ etapa: "st-vis", atividades: [movimentoManual("user")] }));
+    const r = await chamar(client, [ev("cart_sync", "3", { data: { items: [] } })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", estado: "aplicado", movimento: "respeita_movimento_manual" });
+    expect(inseridos).toHaveLength(1);
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+    expect(movimentos).not.toHaveBeenCalled();
+  });
+
+  it("flag DESLIGADO (a compra): o evento move mesmo depois de uma pessoa", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-car", atividades: [movimentoManual("user")] }));
+    const r = await chamar(client, [ev("purchase", "5", { data: { value: 10 } })]);
+    expect(movimentoDe(r, 0)).toBe("movido");
+  });
+
+  it.each(["system", "ai"])("último movimento por %s não é manual: move", async (quem) => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-vis", atividades: [movimentoManual(quem)] }));
+    const r = await chamar(client, [ev("cart_sync", "3", { data: { items: [] } })]);
+    expect(movimentoDe(r, 0)).toBe("movido");
+  });
+
+  it("⭐ depois que o evento move (ator do token), os seguintes voltam a mover", async () => {
+    const abertas = ["s1", "s2", "s3", "s4"].map((id, i) => ({
+      id, name: id, position: (i + 1) * 1000, is_archived: false, is_won: false, is_lost: false, organization_id: ORG_A, pipeline_id: FUNIL,
+    }));
+    const { client } = bancoFalso(
+      tabelasDoCardapio({
+        etapa: "s1",
+        etapas: abertas,
+        atividades: [movimentoManual("user")],
+        cadastros: [
+          cadastro("a", { stage_id: "s2" }),
+          cadastro("b", { stage_id: "s3", respects_manual_move: false }),
+          cadastro("c", { stage_id: "s4" }),
+        ].map((c) => ({ respects_manual_move: true, ...c })),
+      }),
+    );
+    const r = await chamar(client, [ev("a", "1", { at: hora(1) }), ev("b", "2", { at: hora(2) }), ev("c", "3", { at: hora(3) })]);
+    expect(r.resultados.map((x) => (x as { movimento: string }).movimento)).toEqual(["respeita_movimento_manual", "movido", "movido"]);
+    expect(destinosChamados()).toEqual(["s3", "s4"]);
+  });
+});
+
+describe("movimento: as recusas e a corrida", () => {
+  it("⭐ o estado e o valor são gravados ANTES do movimento (o ganho já enxerga o total)", async () => {
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-rev" }));
+    await chamar(client, [ev("purchase", "5", { data: { value: 68.9 } })]);
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+    expect(movimentos).toHaveBeenCalledTimes(1);
+    expect(atualizacoes.mock.invocationCallOrder[0]!).toBeLessThan(movimentos.mock.invocationCallOrder[0]!);
+  });
+
+  it("recusa do funil (campo obrigatório, motivo): 'recusado_pelo_funil' com a mensagem, e estado e valor permanecem", async () => {
+    movimentos.mockRejectedValue(new ApiError(422, "campos_obrigatorios", { faltando: ["forma_pagamento"] }, "", "Falta o campo Forma de pagamento."));
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-rev" }));
+    const r = await chamar(client, [ev("purchase", "5", { data: { value: 68.9 } })]);
+    expect(r.resultados[0]).toMatchObject({
+      resultado: "registrado", estado: "aplicado", valor: "aplicado",
+      movimento: "recusado_pelo_funil", mensagem_do_movimento: "Falta o campo Forma de pagamento.",
+    });
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+  });
+
+  it("reabertura recusada pelo funil (409) também vira 'recusado_pelo_funil'", async () => {
+    movimentos.mockRejectedValue(new ApiError(409, "reabertura_cria_novo", undefined, "", "Negócio encerrado."));
+    const { client } = bancoFalso(tabelasDoCardapio({ etapa: "st-rev" }));
+    const r = await chamar(client, [ev("purchase", "5", { data: { value: 1 } })]);
+    expect(movimentoDe(r, 0)).toBe("recusado_pelo_funil");
+  });
+
+  it("⭐ movimento simultâneo (409 lead_stage_changed_concurrent): 'conflito', sem erro para quem chama", async () => {
+    movimentos.mockRejectedValue(new ApiError(409, "lead_stage_changed_concurrent", undefined, "", "Lead foi modificado concorrentemente."));
+    const { client } = bancoFalso(tabelasDoCardapio());
+    const r = await chamar(client, [ev("page_view", "1")]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", movimento: "conflito" });
+  });
+
+  it("erro inesperado do movimento NÃO é engolido", async () => {
+    movimentos.mockRejectedValue(new ApiError(500, "internal_error", undefined, "", "queda"));
+    const { client } = bancoFalso(tabelasDoCardapio());
+    await expect(chamar(client, [ev("page_view", "1")])).rejects.toMatchObject({ status: 500 });
   });
 });
 

@@ -25,16 +25,30 @@
  * DEPOIS de o evento estar no histórico. Nenhum depende de o registro ter sido novo: um `event_id` já gravado (queda
  * no meio de uma chamada anterior) é reaplicado, e a hora do evento impede que um reenvio antigo sobrescreva o novo.
  * Valor inválido recusa o evento ANTES de gravar qualquer coisa. Pedido encerrado não muda de estado nem de valor.
+ *
+ * ## O movimento vem por último
+ *
+ * Depois do estado e do valor, o card vai para a etapa cadastrada se `decidirMovimento` mandar: o valor já está no
+ * pedido quando o ganho dispara os consumidores de venda. A guarda de corrida é a do `moveLeadHandler`
+ * (`update ... where updated_at = <o que li>`): o segundo movimento simultâneo recebe 409 e vira `conflito`. As
+ * recusas do funil (campo obrigatório, motivo de ganho, reabertura) viram `recusado_pelo_funil`, e o estado e o
+ * valor já gravados permanecem.
  */
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Actor } from "@/lib/api/handlers/types";
 import { ApiError } from "@/lib/api/types";
-import { updateLeadHandler } from "@/app/api/v1/leads/_handler";
+import { moveLeadHandler, updateLeadHandler } from "@/app/api/v1/leads/_handler";
 import { buildLeadActivityRow, type LeadActivityRow } from "@/lib/leads/activity-emitter";
 import { resolverCaminho, valorEmCentavos, type UnidadeDoValor } from "@/lib/leads/eventos-do-funil/caminho-e-valor";
-import { estadoDevePrevalecer } from "@/lib/leads/eventos-do-funil/decisao-de-movimento";
+import {
+  decidirMovimento,
+  estadoDevePrevalecer,
+  type DecisaoDeMovimento,
+  type EtapaParaMover,
+} from "@/lib/leads/eventos-do-funil/decisao-de-movimento";
+import { actorParaAtividade } from "@/lib/leads/activity-emitter";
 import {
   JANELA_DO_PASSADO_MS,
   MAX_BYTES_DA_CHAMADA,
@@ -74,11 +88,25 @@ export type SituacaoDoEstado = "aplicado" | "sem_state_key" | "ignorado_antigo" 
 /** O que aconteceu com o valor da venda (`value_cents`). */
 export type SituacaoDoValor = "aplicado" | "sem_campo" | "ignorado_pedido_encerrado";
 
+/** O que aconteceu com a etapa do card: a decisão pura, mais as duas saídas que só o funil e a corrida produzem. */
+export type SituacaoDoMovimento = DecisaoDeMovimento | "conflito" | "recusado_pelo_funil";
+
+/** O que o evento fez no pedido (a parte que existe quando ele foi processado). */
+interface EfeitoNoPedido {
+  estado: SituacaoDoEstado;
+  valor: SituacaoDoValor;
+  movimento: SituacaoDoMovimento;
+  /** O nome da etapa de destino, quando o card se moveu. */
+  etapa?: string;
+  /** A mensagem do funil, quando ele recusou o movimento. */
+  mensagem_do_movimento?: string;
+}
+
 export type ResultadoDoEvento =
-  | { event: string; event_id: string; resultado: "registrado"; estado: SituacaoDoEstado; valor: SituacaoDoValor }
-  // `estado` e `valor` só existem quando o `event_id` já estava gravado e foi reaplicado; a repetição do fato de
-  // negócio (e do próprio lote) não faz mais nada.
-  | { event: string; event_id: string; resultado: "repetido"; estado?: SituacaoDoEstado; valor?: SituacaoDoValor }
+  | ({ event: string; event_id: string; resultado: "registrado" } & EfeitoNoPedido)
+  // O efeito só existe quando o `event_id` já estava gravado e foi reaplicado; a repetição do fato de negócio (e
+  // do próprio lote) não faz mais nada.
+  | ({ event: string; event_id: string; resultado: "repetido" } & Partial<EfeitoNoPedido>)
   | { event: string; event_id: string; resultado: "recusado"; codigo: CodigoDeRecusa; mensagem: string };
 
 export interface ResultadoDaOperacao {
@@ -98,6 +126,8 @@ export interface RegistrarEventosDoFunilInput {
 interface EventoCadastrado {
   key: string;
   is_active: boolean;
+  stage_id: string | null;
+  respects_manual_move: boolean;
   state_key: string | null;
   value_path: string | null;
   value_unit: UnidadeDoValor | null;
@@ -116,7 +146,7 @@ async function cadastroDoFunil(
   if (!pipelineId) return cadastro;
   const { data, error } = await supabase
     .from("crm_pipeline_events")
-    .select("key, is_active, state_key, value_path, value_unit, dedupe_path")
+    .select("key, is_active, stage_id, respects_manual_move, state_key, value_path, value_unit, dedupe_path")
     .eq("organization_id", organizationId)
     .eq("pipeline_id", pipelineId);
   if (error) throw new ApiError(500, "internal_error", undefined, requestId, `Não consegui ler os eventos do funil: ${error.message}`);
@@ -292,18 +322,29 @@ export async function registrarEventosDoFunil(
     aGravar.forEach((g, i) => situacao.set(g.candidato.indice, porLinha[i] ?? "registrado"));
   }
 
-  // Estado e valor: DEPOIS de tudo estar no histórico, na ordem enviada. Rodam também para o que já estava gravado.
-  const encerrado = pedido.status === "won" || pedido.status === "lost";
+  // Estado, valor e movimento: DEPOIS de tudo estar no histórico, na ordem enviada. Rodam também para o que já estava
+  // gravado. O estado do pedido anda junto: um movimento que o fecha vale para os eventos seguintes do mesmo lote.
+  const doPedido: EstadoDoPedido = {
+    status: pedido.status,
+    etapaAtualId: pedido.stageId,
+    etapas: null,
+    atorDoUltimoMovimento: undefined,
+  };
+  const destinosDoFunil = new Set(
+    [...cadastro.values()].filter((c) => c.is_active && c.stage_id).map((c) => c.stage_id as string),
+  );
   const instantes = new Map<string, Array<{ eventId: string | undefined; quando: string }>>();
   for (const c of [...aGravar.map((g) => g.candidato), ...jaEstavaGravado].sort((a, b) => a.indice - b.indice)) {
+    const encerrado = doPedido.status === "won" || doPedido.status === "lost";
     const aplicado = await aplicarAoPedido(supabase, input, c, encerrado, instantes, requestId);
+    const movido = await moverPeloEvento(supabase, input, c, doPedido, destinosDoFunil, requestId);
     resultados[c.indice] = {
       event: c.evento.event,
       event_id: c.evento.event_id,
       resultado: situacao.get(c.indice) ?? "registrado",
-      estado: aplicado.estado,
-      valor: aplicado.valor,
-    };
+      ...aplicado,
+      ...movido,
+    } as ResultadoDoEvento;
   }
 
   return { lead_id: input.leadId, resultados: resultados as ResultadoDoEvento[] };
@@ -424,4 +465,116 @@ async function aplicarAoPedido(
     await updateLeadHandler(supabase, { organization_id: input.organizationId, actor: input.actor, requestId }, input.leadId, patch);
   }
   return { estado, valor };
+}
+
+interface EtapaConhecida extends EtapaParaMover {
+  name: string;
+  is_archived: boolean;
+  is_won: boolean;
+  is_lost: boolean;
+}
+
+/** O que sabemos do pedido ao longo do lote: muda quando um movimento do próprio lote acontece. */
+interface EstadoDoPedido {
+  status: string | null;
+  etapaAtualId: string | null;
+  /** As etapas envolvidas (a atual e os destinos), lidas uma vez. */
+  etapas: Map<string, EtapaConhecida> | null;
+  /** `actor_kind` do último `stage_changed`: `undefined` = ainda não lido; `null` = o pedido nunca mudou de etapa. */
+  atorDoUltimoMovimento: string | null | undefined;
+}
+
+async function carregarEtapas(
+  supabase: SupabaseClient,
+  organizationId: string,
+  ids: readonly string[],
+  requestId: string,
+): Promise<Map<string, EtapaConhecida>> {
+  const etapas = new Map<string, EtapaConhecida>();
+  if (ids.length === 0) return etapas;
+  const { data, error } = await supabase
+    .from("crm_stages")
+    .select("id, name, position, is_archived, is_won, is_lost")
+    .eq("organization_id", organizationId)
+    .in("id", [...ids]);
+  if (error) throw new ApiError(500, "internal_error", undefined, requestId, `Não consegui ler as etapas do funil: ${error.message}`);
+  for (const e of (data ?? []) as EtapaConhecida[]) etapas.set(e.id, e);
+  return etapas;
+}
+
+async function atorDoUltimoMovimento(
+  supabase: SupabaseClient,
+  input: RegistrarEventosDoFunilInput,
+  requestId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("crm_lead_activities")
+    .select("actor_kind")
+    .eq("organization_id", input.organizationId)
+    .eq("lead_id", input.leadId)
+    .eq("type", "stage_changed")
+    .order("performed_at", { ascending: false })
+    .limit(1);
+  if (error) throw new ApiError(500, "internal_error", undefined, requestId, `Não consegui ler o histórico do pedido: ${error.message}`);
+  return ((data ?? [])[0] as { actor_kind?: string } | undefined)?.actor_kind ?? null;
+}
+
+type Movimento = Pick<EfeitoNoPedido, "movimento" | "etapa" | "mensagem_do_movimento">;
+
+/** Move o card para a etapa cadastrada no evento, se `decidirMovimento` mandar. */
+async function moverPeloEvento(
+  supabase: SupabaseClient,
+  input: RegistrarEventosDoFunilInput,
+  c: Candidato,
+  doPedido: EstadoDoPedido,
+  destinosDoFunil: ReadonlySet<string>,
+  requestId: string,
+): Promise<Movimento> {
+  const destinoId = c.cadastrado.stage_id;
+  if (!destinoId) return { movimento: "sem_destino" };
+
+  if (!doPedido.etapas) {
+    const ids = [...new Set([...(doPedido.etapaAtualId ? [doPedido.etapaAtualId] : []), ...destinosDoFunil, destinoId])];
+    doPedido.etapas = await carregarEtapas(supabase, input.organizationId, ids, requestId);
+  }
+  const destino = doPedido.etapas.get(destinoId) ?? null;
+  const atual = doPedido.etapaAtualId ? doPedido.etapas.get(doPedido.etapaAtualId) ?? null : null;
+  const encerrado = doPedido.status === "won" || doPedido.status === "lost";
+
+  // Só vale ler o ator do último movimento quando a decisão pode chegar a perguntar por ele.
+  if (doPedido.atorDoUltimoMovimento === undefined && c.cadastrado.respects_manual_move && destino && !encerrado) {
+    doPedido.atorDoUltimoMovimento = await atorDoUltimoMovimento(supabase, input, requestId);
+  }
+
+  const decisao = decidirMovimento({
+    etapaAtual: atual,
+    destino: destino ? { id: destino.id, position: destino.position, arquivada: destino.is_archived } : null,
+    etapasDeDestinoDoFunil: destinosDoFunil,
+    pedidoEncerrado: encerrado,
+    respeitaMovimentoManual: c.cadastrado.respects_manual_move,
+    atorDoUltimoMovimento: doPedido.atorDoUltimoMovimento ?? null,
+  });
+  if (decisao !== "movido" || !destino) return { movimento: decisao };
+
+  try {
+    await moveLeadHandler(
+      supabase,
+      { organization_id: input.organizationId, actor: input.actor, requestId },
+      input.leadId,
+      { to_stage_id: destino.id },
+    );
+  } catch (erro) {
+    if (erro instanceof ApiError && erro.status === 409 && erro.code === "lead_stage_changed_concurrent") {
+      return { movimento: "conflito" };
+    }
+    if (erro instanceof ApiError && (erro.status === 409 || erro.status === 422)) {
+      return { movimento: "recusado_pelo_funil", mensagem_do_movimento: erro.message };
+    }
+    throw erro;
+  }
+
+  doPedido.etapaAtualId = destino.id;
+  doPedido.atorDoUltimoMovimento = actorParaAtividade(input.actor).kind;
+  if (destino.is_won) doPedido.status = "won";
+  return { movimento: "movido", etapa: destino.name };
 }

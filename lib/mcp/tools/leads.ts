@@ -577,7 +577,10 @@ export const crmTrackEvent: McpToolDefinition<typeof trackEventInputShape> = {
     "aconteceu com CADA evento, na ordem enviada: `registrado`, `repetido` ou `recusado` (com `codigo` e `mensagem`). " +
     "Só aceita evento CADASTRADO e ativo no funil do pedido (consulte as chaves com crm_list_pipeline_events): evento " +
     "desconhecido é recusado e a mensagem lista as chaves válidas, sem derrubar os outros do lote. Cada evento aceito " +
-    "vira uma linha no histórico do pedido com a hora em que aconteceu. `event_id` é obrigatório: reenviar o mesmo " +
+    "vira uma linha no histórico do pedido com a hora em que aconteceu. Se o cadastro do evento pedir, o mesmo evento " +
+    "também guarda o último conteúdo no pedido (o de hora mais nova vence), grava o valor da venda e leva o card para " +
+    "a etapa cadastrada, sem nunca retroceder nem desfazer o que a equipe moveu à mão; a resposta diz, por evento, o que " +
+    "aconteceu com `estado`, `valor` e `movimento`. `event_id` é obrigatório: reenviar o mesmo " +
     "`event_id` no mesmo pedido volta como `repetido`. Até 50 eventos por chamada, 8 KB por evento, 64 KB por " +
     "chamada, hora do evento de no máximo 30 dias atrás. A chamada inteira conta UMA escrita no teto do token, " +
     "qualquer que seja o lote. Pedido de contato marcado como pessoal é recusado. Uma recusa é definitiva: não " +
