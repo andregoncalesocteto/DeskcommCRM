@@ -186,3 +186,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - Etapa 1 fechada (US-001…US-019). Etapa 2 começa na US-020; antes de cada migration conferir `pnpm checar:colisao-de-migration` (último número usado: 9040).
 ---
+
+## 2026-10-29 - US-020 (etapa 2 começa)
+- Migration `20261029200000_9041_chaves_publicas_do_rastreador.sql` + apêndice idêntico no baseline antes da VARREDURA anon: tabela `crm_tracker_public_keys` (chave `pk_`+36 hex GERADA PELO BANCO, única; rótulo; 1–20 origens; is_active; revoked_at com check "revogada ⇒ inativa"; FK org/funil em cascata; created_by set null). RLS `tenant_isolation_crm_tracker_public_keys_all` com `fn_role_at_least(...,'manager')` para LER e escrever (viewer/agent não veem as chaves); revoke all de anon/authenticated + grant explícito; `fn_aplicar_travas_de_suporte()`.
+- tests/invariants/chaves-publicas-do-rastreador.test.ts (15 casos; registrado em PROVA_PROPRIA); lib/database.types.ts atualizado à mão (bloco antes de crm_tasks).
+- test:db focado (132 testes) verde em INSTALL e UPDATE; test:db:update verde. Sabotagem (constraint `revogada_inativa` → `check (true)` no baseline): 1 vermelho exatamente, como previsto.
+- Decisão: a chave resolve org+funil pela PRÓPRIA linha (consulta por service_role na porta pública, US-022); não há função SQL nova (evita a superfície de EXECUTE da doutrina 9).
+- **Learnings for future iterations:**
+  - Próximo NNNN livre medido: 9042 (`pnpm checar:colisao-de-migration`; sem `gh` ele não mede PRs abertos — declarar).
+  - Tabela cujo LEITOR é só o gerente: use uma política `for all` com fn_role_at_least na USING (sem política de select separada).
+---

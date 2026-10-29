@@ -7381,6 +7381,63 @@ export type Database = {
           },
         ];
       };
+      crm_tracker_public_keys: {
+        Row: {
+          allowed_origins: string[];
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          is_active: boolean;
+          label: string;
+          organization_id: string;
+          pipeline_id: string;
+          public_key: string;
+          revoked_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          allowed_origins: string[];
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          is_active?: boolean;
+          label: string;
+          organization_id: string;
+          pipeline_id: string;
+          public_key?: string;
+          revoked_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          allowed_origins?: string[];
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          is_active?: boolean;
+          label?: string;
+          organization_id?: string;
+          pipeline_id?: string;
+          public_key?: string;
+          revoked_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "crm_tracker_public_keys_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_tracker_public_keys_pipeline_id_fkey";
+            columns: ["pipeline_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_pipelines";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crm_tasks: {
         Row: {
           assigned_to: string | null;
