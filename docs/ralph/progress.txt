@@ -113,3 +113,12 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - Ferramenta de leitura nova: allTools + catalogo (risco 'seguro') bastam; as listas de escopo são só de escrita.
 ---
+
+## 2026-10-29 - US-012
+- Prova ao vivo de crm_track_event pelo endpoint real /api/mcp (código da branch em `next dev -p 3100`, mesmo banco local, token temporário), roteiro de 12 passos: tools/list, funil sem cadastro, cadastro, sequência de 8 eventos numa chamada (Conversas → Compras, won, value_cents 7390), reenvio idêntico (8 linhas antes e depois), mesma compra com outro event_id, evento atrasado, desconhecido + valor negativo no meio de válidos, movimento manual no meio, não retrocede, desvio por "Chamar humano", pedido de outra org, actor_kind 'system'. Tudo bateu com o desenho. Evidência em evidence/eventos-do-funil/prova-mcp-direto-us012.md.
+- Limpeza conferida por consulta: 0 pedidos de teste, 0 eventos cadastrados, 0 tokens temporários. Migration 9040 aplicada ao banco da stack local (a 9039 já estava); o container do app NÃO foi reconstruído, o piloto segue na versão anterior.
+- Suíte inteira: `pnpm test:unit` → 23 falhas, rodapé = grep FAIL = 23; são exatamente as pré-existentes (e2e-apt-troca-espelho 12, e2e-preparo-tenta-de-novo 2, rate-limit 5, janela-24h 1, permissao-lida 1, roteador-grava-o-roteiro 2). `pnpm test:db` completo → 536 arquivos / 4243 testes verdes.
+- **Learnings for future iterations:**
+  - Para provar código da branch sem reconstruir a stack: `pnpm exec next dev -p 3100` (mesmo .env.local); depois `pkill -f "[n]ext dev -p 3100"` e `git checkout -- AGENTS.md` (o next dev reescreve o arquivo).
+  - Um script único que cria token/pedidos, roda o roteiro e limpa em `finally` evita sobras.
+---
