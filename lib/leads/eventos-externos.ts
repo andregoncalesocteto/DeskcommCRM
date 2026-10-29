@@ -31,9 +31,10 @@
  * que já está gravado para aquele pedido é contado como `repetidos`, não gravado
  * de novo. Sem `event_id` não há como saber que dois eventos são o mesmo, e o
  * reenvio duplica — a documentação da ferramenta diz isso a quem integra.
- * A checagem é "ler e depois inserir", sem trava: duas chamadas SIMULTÂNEAS com
- * os mesmos `event_id` podem passar as duas. O cliente que reenvia espera a
- * resposta antes (é o caso normal de repetição) e fica coberto.
+ * A leitura prévia evita o caso normal (reenvio depois da resposta); quem garante
+ * o caso simultâneo é o BANCO: o índice único `uniq_lead_activities_external_event_id`
+ * (migration 9040) recusa a segunda inserção do mesmo `event_id` no mesmo pedido
+ * com `23505`, e a gravação trata esse erro como `repetido` (ver `gravarLinhas`).
  */
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -209,10 +210,47 @@ export async function registrarEventosDoNegocio(
     );
   }
 
+  let registrados = 0;
   if (linhas.length > 0) {
-    const { error } = await supabase.from("crm_lead_activities").insert(linhas);
-    if (error) throw new ApiError(500, "internal_error", undefined, requestId, `Não consegui registrar os eventos: ${error.message}`);
+    const gravadas = await gravarLinhas(supabase, linhas, requestId);
+    registrados = gravadas.registrados;
+    repetidos += gravadas.repetidos;
   }
 
-  return { lead_id: input.leadId, registrados: linhas.length, repetidos };
+  return { lead_id: input.leadId, registrados, repetidos };
+}
+
+/** Código do Postgres para violação de unicidade (o índice do `event_id`). */
+const VIOLACAO_DE_UNICIDADE = "23505";
+
+/**
+ * Grava as linhas; o `event_id` que o banco recusa por já existir conta como repetido.
+ *
+ * O caminho comum é UMA inserção em lote. Se ela falhar com `23505`, outra chamada gravou o
+ * mesmo `event_id` entre a leitura prévia e este insert (a corrida que o índice existe para
+ * fechar) — e o lote inteiro foi desfeito pelo banco, inclusive as linhas legítimas. Aí cada
+ * linha é inserida sozinha: a que colide vira `repetido`, as outras gravam. Qualquer outro erro
+ * continua sendo falha de verdade.
+ */
+async function gravarLinhas(
+  supabase: SupabaseClient,
+  linhas: LeadActivityRow[],
+  requestId: string,
+): Promise<{ registrados: number; repetidos: number }> {
+  const falha = (mensagem: string) =>
+    new ApiError(500, "internal_error", undefined, requestId, `Não consegui registrar os eventos: ${mensagem}`);
+
+  const { error } = await supabase.from("crm_lead_activities").insert(linhas);
+  if (!error) return { registrados: linhas.length, repetidos: 0 };
+  if (error.code !== VIOLACAO_DE_UNICIDADE) throw falha(error.message);
+
+  let registrados = 0;
+  let repetidos = 0;
+  for (const linha of linhas) {
+    const { error: erroDaLinha } = await supabase.from("crm_lead_activities").insert(linha);
+    if (!erroDaLinha) registrados += 1;
+    else if (erroDaLinha.code === VIOLACAO_DE_UNICIDADE) repetidos += 1;
+    else throw falha(erroDaLinha.message);
+  }
+  return { registrados, repetidos };
 }

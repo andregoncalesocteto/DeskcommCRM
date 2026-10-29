@@ -42,8 +42,13 @@ const ATOR: Actor = { type: "api_token", id: "tok-1", role: "agent" };
 interface Linha {
   [coluna: string]: unknown;
 }
-function bancoFalso(tabelas: Record<string, Linha[]>) {
+function bancoFalso(
+  tabelas: Record<string, Linha[]>,
+  // Simula o índice único do banco: devolve o erro de uma inserção, ou null se ela passa.
+  recusa?: (linhas: Linha[]) => { code: string; message: string } | null,
+) {
   const inseridos: Linha[] = [];
+  const chamadasDeInsert: Linha[][] = [];
   const from = (tabela: string) => {
     const filtros: Array<[string, unknown]> = [];
     let emIn: [string, unknown[]] | null = null;
@@ -62,7 +67,11 @@ function bancoFalso(tabelas: Record<string, Linha[]>) {
         return { data: achou ?? null, error: null };
       },
       insert: async (linhas: Linha | Linha[]) => {
-        inseridos.push(...(Array.isArray(linhas) ? linhas : [linhas]));
+        const lista = Array.isArray(linhas) ? linhas : [linhas];
+        chamadasDeInsert.push(lista);
+        const erro = recusa?.(lista) ?? null;
+        if (erro) return { error: erro };
+        inseridos.push(...lista);
         return { error: null };
       },
       then: (resolve: (v: { data: Linha[]; error: null }) => unknown) => {
@@ -81,7 +90,7 @@ function bancoFalso(tabelas: Record<string, Linha[]>) {
     return construtor;
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dublê mínimo do SupabaseClient
-  return { client: { from } as any, inseridos };
+  return { client: { from } as any, inseridos, chamadasDeInsert };
 }
 
 function lote(n: number): EventoExterno[] {
@@ -173,13 +182,13 @@ describe("a linha do tempo guarda a HORA DO EVENTO", () => {
   });
 });
 
-describe("registrarEventosDoNegocio", () => {
-  const tabelas = () => ({
-    crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: CONTATO }],
-    contacts: [{ id: CONTATO, organization_id: ORG_A, is_personal: false }],
-    crm_lead_activities: [] as Linha[],
-  });
+const tabelas = () => ({
+  crm_leads: [{ id: LEAD, organization_id: ORG_A, contact_id: CONTATO }],
+  contacts: [{ id: CONTATO, organization_id: ORG_A, is_personal: false }],
+  crm_lead_activities: [] as Linha[],
+});
 
+describe("registrarEventosDoNegocio", () => {
   it("grava UMA linha por evento, na hora em que ele aconteceu", async () => {
     const { client, inseridos } = bancoFalso(tabelas());
     const eventos = lote(3);
@@ -251,5 +260,59 @@ describe("registrarEventosDoNegocio", () => {
       registrarEventosDoNegocio(client, { organizationId: ORG_A, leadId: LEAD, actor: ATOR, eventos: [], agora: AGORA }),
     ).rejects.toMatchObject({ status: 422 });
     expect(inseridos).toHaveLength(0);
+  });
+});
+
+describe("corrida de gravação: o banco recusa o event_id repetido (23505)", () => {
+  const idDe = (l: Linha) => (l.payload as Linha).event_id;
+  // O índice recusa qualquer inserção que contenha o event_id "ev-2", já gravado por outra chamada.
+  const colide = (linhas: Linha[]) =>
+    linhas.some((l) => idDe(l) === "ev-2") ? { code: "23505", message: "duplicate key value" } : null;
+  const tresEventos: EventoExterno[] = [
+    { event: "view_item", event_id: "ev-1" },
+    { event: "view_item", event_id: "ev-2" },
+    { event: "view_item", event_id: "ev-3" },
+  ];
+
+  it("o lote falha por UM event_id repetido: grava os outros dois e conta um repetido", async () => {
+    const { client, inseridos } = bancoFalso(tabelas(), colide);
+    const r = await registrarEventosDoNegocio(client, { organizationId: ORG_A, leadId: LEAD, actor: ATOR, eventos: tresEventos, agora: AGORA });
+    expect(r).toEqual({ lead_id: LEAD, registrados: 2, repetidos: 1 });
+    expect(inseridos.map(idDe)).toEqual(["ev-1", "ev-3"]);
+  });
+
+  it("sem corrida, a gravação continua sendo UMA inserção em lote", async () => {
+    const { client, chamadasDeInsert } = bancoFalso(tabelas());
+    const r = await registrarEventosDoNegocio(client, { organizationId: ORG_A, leadId: LEAD, actor: ATOR, eventos: tresEventos, agora: AGORA });
+    expect(r).toMatchObject({ registrados: 3, repetidos: 0 });
+    expect(chamadasDeInsert).toHaveLength(1);
+  });
+
+  it("a repetição vista na leitura prévia e a vista pelo banco somam", async () => {
+    const t = tabelas();
+    t.crm_lead_activities.push({
+      organization_id: ORG_A, lead_id: LEAD, type: "external_event", payload: { event: "view_item", event_id: "ev-1" },
+    });
+    const { client } = bancoFalso(t, colide);
+    const r = await registrarEventosDoNegocio(client, { organizationId: ORG_A, leadId: LEAD, actor: ATOR, eventos: tresEventos, agora: AGORA });
+    expect(r).toEqual({ lead_id: LEAD, registrados: 1, repetidos: 2 });
+  });
+
+  it("erro que NÃO é de unicidade continua sendo falha: 500, e nada é contado como repetido", async () => {
+    const { client } = bancoFalso(tabelas(), () => ({ code: "XX000", message: "disco cheio" }));
+    await expect(
+      registrarEventosDoNegocio(client, { organizationId: ORG_A, leadId: LEAD, actor: ATOR, eventos: tresEventos, agora: AGORA }),
+    ).rejects.toMatchObject({ status: 500, code: "internal_error" });
+  });
+
+  it("erro que não é de unicidade DEPOIS da corrida também falha (não é engolido)", async () => {
+    let chamadas = 0;
+    const { client } = bancoFalso(tabelas(), () => {
+      chamadas += 1;
+      return chamadas === 1 ? { code: "23505", message: "dup" } : { code: "XX000", message: "queda" };
+    });
+    await expect(
+      registrarEventosDoNegocio(client, { organizationId: ORG_A, leadId: LEAD, actor: ATOR, eventos: tresEventos, agora: AGORA }),
+    ).rejects.toMatchObject({ status: 500 });
   });
 });
