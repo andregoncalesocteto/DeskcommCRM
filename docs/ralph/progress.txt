@@ -34,3 +34,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `pnpm checar:colisao-de-migration` mede contra o `origin/main` do fork (defasado); usar `git ls-tree produto/main` para o teto real. Sem `gh`, PRs abertos não são medidos.
   - A migration já foi aplicada no banco da stack local (tabela vazia), para as provas ao vivo.
 ---
+
+## 2026-10-29 - US-004
+- Migration 20261029191000_9040_evento_externo_event_id_unico.sql: deduplica external_event repetidos por (organização, pedido, event_id) mantendo a linha mais antiga e cria o índice único parcial uniq_lead_activities_external_event_id. Espelhada no baseline antes da VARREDURA anon.
+- Teste tests/invariants/evento-externo-event-id-unico.test.ts (7 casos): índice existe/único/parcial; 23505 no mesmo pedido; mesmo id em outro pedido aceito; sem event_id repete; outro tipo não é tocado; corrida real com duas conexões (uma grava, a outra 23505); migration reaplicada sobre duplicatas (mantém a mais antiga, idempotente).
+- Provado: pnpm test:db dos dois arquivos (33 testes) + sabotagem (baseline sem o índice): 4 vermelhos, previsto 3; o 4º é cascata (a duplicata do teste anterior inflou a contagem).
+- Não provado como cenário próprio: baseline reaplicado (update) sobre duplicatas; coberto indiretamente porque o bloco do baseline é o mesmo texto da migration, e o teste a reaplica.
+- **Learnings for future iterations:**
+  - `payload ? 'event_id'` funciona em índice parcial e em delete via psql; o supabase-js não faz upsert contra índice parcial/expressão, então corrida se trata por erro 23505 e reinserção linha a linha.
+  - Nos testes de banco, `sql()` roda multi-statement com ON_ERROR_STOP; `pool` (pg) serve para inspecionar `code` e `constraint` do erro.
+---
