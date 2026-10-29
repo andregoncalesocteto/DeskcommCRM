@@ -323,3 +323,11 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - Valide SQL de relatório com `( echo begin; echo <inserts>; cat arquivo.sql; echo rollback ) | docker exec -i … psql -v ON_ERROR_STOP=1 -v org=…`.
 ---
+
+## 2026-10-29 - US-035
+- Prova ao vivo na stack local (script `curl` + leitura do banco depois de cada passo; tabela em evidence/eventos-do-funil/prova-webhook-us035.md): cliente novo → 1 card em Compras (won) com 7390 e JSON; cliente com card da Bella em Revisão → MESMO card (1 só), fechado em Compras com 5990 e JSON, origem segue `whatsapp`; reenvio idêntico dos dois → estado idêntico (incluindo contagem de atividades). Sobras 0.
+- Para provar a CRIAÇÃO foi preciso aplicar a migration 9028 no banco local (estava atrás do `main`; aditiva).
+- **Learnings for future iterations:**
+  - O banco local da stack não tem `schema_migrations`: ele é atualizado reaplicando as migrations à mão; conferir `information_schema` antes de culpar o código.
+  - NUNCA `pkill -f "...next dev..."` num comando cujo texto (heredoc) cita essa frase: o padrão casa com o próprio shell e o mata. Descobrir o PID pela porta (`ss -ltnp | grep :3100`).
+---
