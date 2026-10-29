@@ -51,7 +51,17 @@ import { irAoDesafioDeMfa } from "@/lib/auth/ir-ao-desafio-de-mfa";
 import { CaretDown, Plus, Trash } from "@/lib/ui/icons";
 import { entradaDoInboxDeclarada } from "@/lib/leads/entrada-do-inbox";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
+import { EventosDoFunilSection } from "./_eventos";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
+
+/** As chaves dos campos declarados da ficha (`settings.fields`): o "guardar em" de um evento não pode repeti-las. */
+function chavesDosCamposDaFicha(settings: Record<string, unknown> | null): string[] {
+  const campos = settings?.fields;
+  if (!Array.isArray(campos)) return [];
+  return campos
+    .map((c) => (c && typeof c === "object" ? (c as { key?: unknown }).key : undefined))
+    .filter((k): k is string => typeof k === "string");
+}
 
 export interface PipelineRow {
   id: string;
@@ -397,6 +407,12 @@ function CardDoFunil({
       <StagesSection pipelineId={pipeline.id} ancoraMapeamento={ancoraDoMapeamento(pipeline.id)} />
       <div className="border-t border-border pt-6">
         <AgentMappingSection pipelineId={pipeline.id} ancoraEtapas={ancoraDasEtapas(pipeline.id)} />
+      </div>
+      <div className="border-t border-border pt-6">
+        <EventosDoFunilSection
+          pipelineId={pipeline.id}
+          camposDaFicha={chavesDosCamposDaFicha(pipeline.settings)}
+        />
       </div>
       {podeEditarConfig && (
         <div className="space-y-4 border-t border-border pt-6">

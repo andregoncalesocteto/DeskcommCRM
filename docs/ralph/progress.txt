@@ -156,3 +156,14 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
 - **Learnings for future iterations:**
   - Caminho com dois parâmetros dinâmicos fica em `[id]/events/[event_id]`; no teste, o helper está 7 níveis acima (`../../../../../../../tests/helpers/...`).
 ---
+
+## 2026-10-29 - US-016 e US-017 (um commit: o mesmo componente e a mesma verificação no navegador)
+- app/app/settings/tenant/pipelines/_eventos.tsx (seção "Para onde o card vai em cada evento", montada em _client.tsx abaixo do mapa do agente) + hooks/pipelines/useEventosDoFunil.ts. Lista com nome, chave, destino em palavras, selo "Desativado", sinais de uso (último recebimento e 7 dias, ou "Ainda não recebeu nada."), avisos que não bloqueiam (venda sem valor, etapa arquivada, "guardar em" repetido) e formulário de criar/editar com opções avançadas escondidas por padrão. Destino só oferece etapa que a API aceitaria (sem perda). A edição manda só o delta; chave trancada quando já recebeu registros. Bloqueio no cliente de "guardar em" igual a campo da ficha (camposDaFicha vem de pipeline.settings.fields).
+- Verificado NO NAVEGADOR (dev-browser, next dev na porta 3100, usuário gerente temporário criado e apagado): cadastro pela tela, avisos, bloqueio, edição, chave trancada, desativar/ativar, e o laço MCP→tela (compra enviada por crm_track_event move o card a Compras com valor e a tela passa a mostrar o uso). Capturas e roteiro em evidence/eventos-do-funil/ (us016-*.png, us017-*.png, verificacao-no-navegador-us016-us017.md). Sobras conferidas: 0.
+- app/app/settings/tenant/pipelines/_eventos.test.tsx: 36 casos. Sabotagens: 10 (todas vermelhas; previsto acertado em 8, errei E da US-016 (3 em vez de 2) e a C da US-017 (2, previsto confuso)).
+- Cercas de tela que acusaram CÓDIGO MEU e foram consertadas: `rounded` puro (usar rounded-md), data com "pt-BR" fixo (usar useTagDeIdioma) e 45 textos sem espanhol (entradas em lib/i18n/dicionario.ts, "tarjeta"/"embudo" como no resto). 24 arquivos de tradução + 5 cercas de tela passam.
+- **Learnings for future iterations:**
+  - Texto novo em tela exige: entrada es em lib/i18n/dicionario.ts para cada t("…") literal (inclusive fragmentos concatenados), `useTagDeIdioma()` para data, e rounded-md (nunca `rounded`). Rodar `tests/unit/i18n-*` e `tailwind-tokens` antes de commitar tela.
+  - O conferidor de chaves faltando sai do próprio teste (`i18n-espanhol-cobre-a-tela`): rodar, copiar a lista, traduzir.
+  - Para logar no navegador sem a senha do dono: criar usuário temporário pela API de admin do Auth (`POST /auth/v1/admin/users` com a service key) + linha em user_organizations (role manager) e apagar no fim.
+---

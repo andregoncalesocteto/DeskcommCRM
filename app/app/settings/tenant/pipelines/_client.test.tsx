@@ -25,7 +25,7 @@ vi.mock("sonner", () => ({
 vi.mock("@/app/actions/settings/updatePipelineConfig", () => ({
   updatePipelineConfig: vi.fn(async () => ({ ok: true })),
 }));
-// As duas seções irmãs falam com a API; este arquivo é sobre os CAMPOS.
+// As seções irmãs falam com a API; este arquivo é sobre os CAMPOS.
 vi.mock("./_stages", () => ({
   StagesSection: () => null,
   ancoraDasEtapas: () => "etapas",
@@ -33,6 +33,9 @@ vi.mock("./_stages", () => ({
 vi.mock("./_mapping", () => ({
   AgentMappingSection: () => null,
   ancoraDoMapeamento: () => "mapeamento",
+}));
+vi.mock("./_eventos", () => ({
+  EventosDoFunilSection: () => null,
 }));
 
 // Polyfills que o Radix Select exige e o jsdom não tem.
