@@ -471,6 +471,10 @@ export const AUDIT_ACTIONS = [
   "ai.case_noted_by_agent",
   "ai.case_closed_by_agent",
   "pipeline.agent_mapping_updated",
+  // Cadastro de eventos do funil (o que um sistema de fora pode contar e para onde o card vai em cada fato).
+  "pipeline_event.created",
+  "pipeline_event.updated",
+  "pipeline_event.deactivated",
   "pipeline.stage_created",
   "pipeline.stage_updated",
   "pipeline.stage_archived",

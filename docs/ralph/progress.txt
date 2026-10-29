@@ -133,3 +133,15 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - O dublê exporta `OpcoesDoBancoFalso`; ao tipar `erroEm` num teste, usar `OpcoesDoBancoFalso["erroEm"]` (Parameters<typeof ...>[1] dá erro com o parâmetro opcional).
   - Rota nova de GET não pede requireSupportWrite; as de POST/PATCH/DELETE pedem (gate suporte-cobertura-de-efeitos).
 ---
+
+## 2026-10-29 - US-014
+- POST /api/v1/pipelines/[id]/events: requireSupportWrite → requireRole('manager') → Zod strict (novoEventoSchema em cadastro.ts) → Idempotency-Key (UUID; recibo por endpoint do funil via comIdempotencia) → funil da organização (404) → validarContraOFunil → insert → audit `pipeline_event.created` → 201 `{ evento, avisos }`.
+- validarContraOFunil: etapa do MESMO funil (e da organização), não arquivada, não de perda (422 em português); `state_key` igual à chave de um campo declarado de `crm_pipelines.settings.fields` bloqueia (422); `state_key` já usado por outro evento do funil só avisa (`avisos`). Chave repetida no funil (índice único 23505) → 409 state_conflict.
+- organization_id e pipeline_id no corpo são recusados (schema estrito): a organização sai da sessão e o funil do caminho.
+- lib/audit/actions.ts: três ações novas (pipeline_event.created/updated/deactivated); lista tipada, sem elas o tsc recusa.
+- app/api/v1/pipelines/[id]/events/route.test.ts: 45 casos (37 novos). Sabotagens (7, todas 1 vermelho como previsto): sem requireSupportWrite, insert sem a organização da sessão, sem checar o funil da etapa, sem barrar etapa de perda, sem barrar campo declarado, sem o aviso, etapa sem filtro de organização.
+- Gate i18n: `t()` não aceita template literal (cerca "chave construída em runtime"); a frase fixa vai no `t()` e a chave concatena fora. 412 arquivos que varrem rotas/auditoria: só falham os 3 pré-existentes.
+- **Learnings for future iterations:**
+  - Closure perde o estreitamento de `authz` (união ok/não-ok): capturar `const userId = authz.user.id` antes de funções internas.
+  - Ação de auditoria nova precisa entrar em lib/audit/actions.ts.
+---
