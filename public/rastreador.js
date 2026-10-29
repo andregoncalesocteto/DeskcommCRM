@@ -1,13 +1,13 @@
 /*
- * Rastreador do Deskcomm: o script que um cardápio ou página de terceiro cola para contar ao CRM o que o cliente fez.
+ * Rastreador do CRM: o script que um cardápio ou página de terceiro cola para contar ao CRM o que o cliente fez.
  *
  * Escrito à mão para este produto, sem dependência e sem trecho de SDK de terceiro. API MANUAL: quem integra chama
  * `track` onde quer; NÃO há observação automática de atributos HTML e NÃO se lê o `dataLayer`.
  *
- *   deskcomm('init',  { key: 'pk_...' [, debug: true] [, storage: false] [, endpoint: 'https://seu-crm'] });
- *   deskcomm('track', 'page_view', { screen_name: 'home' });
- *   deskcomm('optOut');   // o visitante pediu para não ser rastreado: apaga o que foi guardado e para
- *   deskcomm('optIn');    // desfaz o optOut
+ *   rastreador('init',  { key: 'pk_...' [, debug: true] [, storage: false] [, endpoint: 'https://seu-crm'] });
+ *   rastreador('track', 'page_view', { screen_name: 'home' });
+ *   rastreador('optOut');   // o visitante pediu para não ser rastreado: apaga o que foi guardado e para
+ *   rastreador('optIn');    // desfaz o optOut
  *
  * O que ele garante:
  *  · cada evento ganha um `event_id` (UUID) ao nascer e o mantém até a confirmação: reenviar nunca duplica;
@@ -33,8 +33,8 @@
   var FILA_MAXIMA = 200;
   var TENTATIVAS_MAXIMAS = 5;
   var PROFUNDIDADE_MAXIMA = 6;
-  var NA_SESSAO = "deskcomm_idtrack";
-  var NO_NAVEGADOR = "deskcomm_optout";
+  var NA_SESSAO = "rastreador_idtrack";
+  var NO_NAVEGADOR = "rastreador_optout";
   // Chaves (em minúsculas, exatas) que identificam a pessoa. `item_name` não está aqui: é nome de produto.
   var PESSOAIS = {
     phone: 1, telefone: 1, celular: 1, whatsapp: 1, email: 1, "e-mail": 1, mail: 1, name: 1, nome: 1,
@@ -49,12 +49,12 @@
   var enviando = false;
   var falhasSeguidas = 0;
   var avisadas = {};
-  var anterior = w.deskcomm;
+  var anterior = w.rastreador;
 
   function aviso() {
     if (!cfg || !cfg.debug || !w.console || !w.console.warn) return;
     try {
-      w.console.warn.apply(w.console, ["[deskcomm]"].concat([].slice.call(arguments)));
+      w.console.warn.apply(w.console, ["[rastreador]"].concat([].slice.call(arguments)));
     } catch { /* o aviso nunca atrapalha */ }
   }
 
@@ -366,7 +366,7 @@
     }
   } catch { /* ignora */ }
 
-  w.deskcomm = api;
+  w.rastreador = api;
   // As chamadas feitas ANTES de este arquivo carregar (o pequeno trecho de instalação as enfileira em `q`).
   try {
     var pendentes = anterior && anterior.q ? anterior.q : [];

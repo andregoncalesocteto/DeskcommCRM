@@ -37,18 +37,18 @@ evento se o cliente não tem um pedido aberto **neste funil** (ele nunca cria pe
 Onde algo acontece na página, uma linha:
 
 ```js
-deskcomm("track", "page_view",      { screen_name: "home" });
-deskcomm("track", "view_item",      { item_id: "pizza-1", item_name: "Pizza grande", price: 59.9 });
-deskcomm("track", "cart_sync",      { items: [{ item_id: "pizza-1", item_name: "Pizza grande", price: 59.9, quantity: 1 }] });
-deskcomm("track", "begin_checkout", { value: 73.9, item_count: 1, delivery_type: "delivery" });
-deskcomm("track", "purchase",       { order_id: "P-1042", value: 73.9, payment_method: "pix" });
+rastreador("track", "page_view",      { screen_name: "home" });
+rastreador("track", "view_item",      { item_id: "pizza-1", item_name: "Pizza grande", price: 59.9 });
+rastreador("track", "cart_sync",      { items: [{ item_id: "pizza-1", item_name: "Pizza grande", price: 59.9, quantity: 1 }] });
+rastreador("track", "begin_checkout", { value: 73.9, item_count: 1, delivery_type: "delivery" });
+rastreador("track", "purchase",       { order_id: "P-1042", value: 73.9, payment_method: "pix" });
 ```
 
 O primeiro argumento é a **chave do evento, exatamente como cadastrada no funil**. Os dados são livres, mas o evento de valor
 precisa trazer o campo que o cadastro indica (aqui, `value`). Mande o **carrinho inteiro** em `cart_sync`: o último vale.
 Reenviar o mesmo pedido com o mesmo `order_id` conta como repetição e não duplica (a página de sucesso pode ser recarregada).
 
-Outros comandos: `deskcomm("optOut")` (o visitante pediu para não ser rastreado) e `deskcomm("optIn")`; em `init`, `storage: false`
+Outros comandos: `rastreador("optOut")` (o visitante pediu para não ser rastreado) e `rastreador("optIn")`; em `init`, `storage: false`
 (não guarda nada no navegador) e `debug: true` (avisa no console do navegador quando um evento não está cadastrado no funil, com a
 lista dos cadastrados).
 
@@ -71,11 +71,11 @@ O código roda na máquina do visitante, que pode alterá-lo. Por isso:
   `email`, `name`, `nome`, `cpf` (em qualquer profundidade; `item_name`, nome de produto, não é removido) e qualquer valor com
   cara de e-mail. O único identificador enviado é o `idtrack`, que o CRM já tinha.
 - **No navegador do visitante o script guarda só o `idtrack`**, na sessão (`sessionStorage`, some ao fechar a aba). Se o visitante
-  chamar `optOut`, ele apaga isso e grava um marcador `deskcomm_optout` (em `localStorage`) para respeitar a escolha nas próximas
+  chamar `optOut`, ele apaga isso e grava um marcador `rastreador_optout` (em `localStorage`) para respeitar a escolha nas próximas
   páginas. Com `storage: false` nada é guardado.
 - **Quem instala é o controlador dos dados**: a sua empresa. Informe no aviso de privacidade e, quando a sua base legal exigir, no
   banner de consentimento do site, que o cardápio registra a navegação do cliente identificado no CRM. Ofereça um jeito de o visitante
-  optar por sair (`deskcomm("optOut")`) e só inicialize o rastreador depois do consentimento, se for o caso.
+  optar por sair (`rastreador("optOut")`) e só inicialize o rastreador depois do consentimento, se for o caso.
 
 ## 6. Se algo não aparece
 
@@ -88,4 +88,4 @@ O código roda na máquina do visitante, que pode alterá-lo. Por isso:
 | «Muitas requisições» | A porta limita por visitante (60 por minuto) e por chave (1.200 por minuto) |
 | A compra aparece no histórico e o pedido não foi a Compras | Faltou um evento de estado antes (carrinho ou pagamento), ou o pedido já estava encerrado |
 
-Fonte do script: `public/deskcomm-rastreador.js` (sem dependência). Desenho: [`../design/eventos-do-funil.md`](../design/eventos-do-funil.md).
+Fonte do script: `public/rastreador.js` (sem dependência). Desenho: [`../design/eventos-do-funil.md`](../design/eventos-do-funil.md).

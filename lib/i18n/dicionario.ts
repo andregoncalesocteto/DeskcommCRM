@@ -18410,7 +18410,7 @@ export const DICIONARIO: Traducoes = {
   "nos últimos 7 dias": { es: "en los últimos 7 días" },
   "Visto pela última vez em": { es: "Visto por última vez el" },
   "Chave não encontrada.": { es: "Clave no encontrada." },
-  "Origem não aceita: use https://seu-site.com.br, sem caminho (http só em localhost).": { es: "Origen no aceptado: usa https://tu-sitio.com, sin ruta (http solo en localhost)." },
+  "Origem não aceita: use o endereço do site começando por https://, sem caminho (http só em localhost).": { es: "Origen no aceptado: usa la dirección del sitio empezando por https://, sin ruta (http solo en localhost)." },
   // Rastreador para o site do cardápio (Configurações › Funis).
   "Use o endereço do site, começando por https://, sem nada depois do nome. Para testar no seu computador, http://localhost também vale.": { es: "Usa la dirección del sitio, empezando por https://, sin nada después del nombre. Para probar en tu computadora, http://localhost también vale." },
   "Criar chave": { es: "Crear clave" },
@@ -18438,7 +18438,7 @@ export const DICIONARIO: Traducoes = {
   "Ainda não recebeu nenhum evento.": { es: "Aún no ha recibido ningún evento." },
   "Dê um nome à chave.": { es: "Dale un nombre a la clave." },
   "Informe ao menos um site, um por linha.": { es: "Indica al menos un sitio, uno por línea." },
-  "Site não aceito: use https://seu-site.com.br, sem caminho (http só em localhost).": { es: "Sitio no aceptado: usa https://tu-sitio.com, sin ruta (http solo en localhost)." },
+  "Site não aceito: use o endereço do site começando por https://, sem caminho (http só em localhost).": { es: "Sitio no aceptado: usa la dirección del sitio empezando por https://, sin ruta (http solo en localhost)." },
   "Nome da chave": { es: "Nombre de la clave" },
   "Cardápio digital": { es: "Menú digital" },
   "Sites onde o código vai rodar (um por linha)": { es: "Sitios donde correrá el código (uno por línea)" },

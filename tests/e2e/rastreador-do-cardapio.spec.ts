@@ -214,7 +214,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     const codigo = secao.locator(`[data-testid="codigo-${chaveId}"] pre`).first();
     trecho = await codigo.innerText();
     expect(trecho).toContain("pk_");
-    expect(trecho).toContain("/deskcomm-rastreador.js");
+    expect(trecho).toContain("/rastreador.js");
     await captura(page, "01-chave-e-codigo");
 
     // Agora sim: a página do cardápio, com o código COPIADO DA TELA, na porta que a chave autoriza.
@@ -235,7 +235,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     const rede = espiarColeta(page);
     await abrirCardapio(page, "localhost", contatos.fluxo);
     await page.evaluate((sufixo) => {
-      const d = (window as unknown as { deskcomm: (...a: unknown[]) => void }).deskcomm;
+      const d = (window as unknown as { rastreador: (...a: unknown[]) => void }).rastreador;
       d("track", "page_view", { screen_name: "home", phone: "+5517982290042" });
       d("track", "view_item", { item_id: "pizza-1", item_name: "Pizza grande", price: 59.9 });
       d("track", "cart_sync", { items: [{ item_id: "pizza-1", item_name: "Pizza grande", price: 59.9, quantity: 1 }], email: "a@b.com" });
@@ -271,7 +271,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     await abrirCardapio(page, "localhost", contatos.fluxo);
     const antes = await estadoDoPedido(pedidos.fluxo);
     await page.evaluate((order) => {
-      const d = (window as unknown as { deskcomm: (...a: unknown[]) => void }).deskcomm;
+      const d = (window as unknown as { rastreador: (...a: unknown[]) => void }).rastreador;
       d("track", "purchase", { order_id: order, value: 73.9, payment_method: "pix" });
       d("flush");
     }, `P-${SUFIXO}`);
@@ -286,7 +286,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
   test("a compra sem carrinho antes é registrada, mas NÃO fecha o pedido", async ({ page }) => {
     await abrirCardapio(page, "localhost", contatos.semCarrinho);
     await page.evaluate((order) => {
-      const d = (window as unknown as { deskcomm: (...a: unknown[]) => void }).deskcomm;
+      const d = (window as unknown as { rastreador: (...a: unknown[]) => void }).rastreador;
       d("track", "purchase", { order_id: order, value: 999, payment_method: "pix" });
       d("flush");
     }, `FORJADA-${SUFIXO}`);
@@ -303,7 +303,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     const rede = espiarColeta(page);
     await abrirCardapio(page, "localhost", "+5517982290042");
     await page.evaluate(() => {
-      const d = (window as unknown as { deskcomm: (...a: unknown[]) => void }).deskcomm;
+      const d = (window as unknown as { rastreador: (...a: unknown[]) => void }).rastreador;
       d("track", "page_view", { screen_name: "home" });
       d("flush");
     });
@@ -323,7 +323,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     });
     await abrirCardapio(page, "127.0.0.1", contatos.outraOrigem);
     await page.evaluate(() => {
-      const d = (window as unknown as { deskcomm: (...a: unknown[]) => void }).deskcomm;
+      const d = (window as unknown as { rastreador: (...a: unknown[]) => void }).rastreador;
       d("track", "page_view", { screen_name: "home" });
       d("flush");
     });
@@ -353,7 +353,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     const cardapio = await context.newPage();
     await abrirCardapio(cardapio, "localhost", contatos.revogada);
     await cardapio.evaluate(() => {
-      const d = (window as unknown as { deskcomm: (...a: unknown[]) => void }).deskcomm;
+      const d = (window as unknown as { rastreador: (...a: unknown[]) => void }).rastreador;
       d("track", "page_view", { screen_name: "home" });
       d("flush");
     });

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import {
@@ -36,10 +37,10 @@ export function trechoDeInstalacao(enderecoDoCrm: string, chave: string): string
   const base = enderecoDoCrm.replace(/\/+$/, "");
   return [
     "<script>",
-    "(function(w,d,s){w.deskcomm=w.deskcomm||function(){(w.deskcomm.q=w.deskcomm.q||[]).push([].slice.call(arguments))};" +
+    "(function(w,d,s){w.rastreador=w.rastreador||function(){(w.rastreador.q=w.rastreador.q||[]).push([].slice.call(arguments))};" +
       'var e=d.createElement("script");e.async=1;e.src=s;d.head.appendChild(e)})' +
-      `(window,document,"${base}/deskcomm-rastreador.js");`,
-    `deskcomm("init",{key:"${chave}",endpoint:"${base}"});`,
+      `(window,document,"${base}/rastreador.js");`,
+    `rastreador("init",{key:"${chave}",endpoint:"${base}"});`,
     "</script>",
   ].join("\n");
 }
@@ -78,7 +79,7 @@ function FormularioDaChave({
   let problema: string | null = null;
   if (nome.trim() === "") problema = t("Dê um nome à chave.");
   else if (!origens.ok && origens.invalida === null) problema = t("Informe ao menos um site, um por linha.");
-  else if (!origens.ok) problema = `${t("Site não aceito: use https://seu-site.com.br, sem caminho (http só em localhost).")} («${origens.invalida}»)`;
+  else if (!origens.ok) problema = `${t("Site não aceito: use o endereço do site começando por https://, sem caminho (http só em localhost).")} («${origens.invalida}»)`;
 
   return (
     <div className="space-y-4 rounded-md border border-border bg-surface-2 p-4" data-testid="form-chave">
@@ -98,7 +99,7 @@ function FormularioDaChave({
           id="chave-sites"
           rows={3}
           value={sites}
-          placeholder="https://cardapio.minhaloja.com.br"
+          placeholder="https://"
           onChange={(e) => setSites(e.target.value)}
           className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm"
         />
@@ -162,10 +163,9 @@ export function RastreadorSection({ pipelineId }: { pipelineId: string }) {
   const enderecoDoCrm = typeof window === "undefined" ? "" : window.location.origin;
 
   async function copiar(c: ChaveDoRastreador) {
-    try {
-      await navigator.clipboard.writeText(trechoDeInstalacao(enderecoDoCrm, c.public_key));
+    if (await copyToClipboard(trechoDeInstalacao(enderecoDoCrm, c.public_key))) {
       toast.success(t("Código copiado. Cole no site, dentro de <head>."));
-    } catch {
+    } else {
       setVerCodigo(c.id);
       toast.error(t("Não consegui copiar. O código está aberto abaixo: selecione e copie."));
     }
@@ -293,7 +293,7 @@ export function RastreadorSection({ pipelineId }: { pipelineId: string }) {
                     {t("Depois, onde algo acontecer na página, conte ao CRM com uma linha como esta (o link que leva o cliente ao cardápio precisa trazer ?idtrack=):")}
                   </p>
                   <pre className="overflow-x-auto rounded-md border border-border bg-surface-2 p-3 text-xs">
-                    {'deskcomm("track","page_view",{screen_name:"home"});'}
+                    {'rastreador("track","page_view",{screen_name:"home"});'}
                   </pre>
                 </div>
               )}

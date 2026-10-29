@@ -58,11 +58,11 @@ beforeEach(() => {
 describe("trechoDeInstalacao", () => {
   it("⭐ leva a chave e o endereço do CRM, sem barra sobrando, e carrega o arquivo do rastreador", () => {
     const codigo = trechoDeInstalacao("https://crm.exemplo/", CHAVE);
-    expect(codigo).toContain(`deskcomm("init",{key:"${CHAVE}",endpoint:"https://crm.exemplo"});`);
-    expect(codigo).toContain('"https://crm.exemplo/deskcomm-rastreador.js"');
+    expect(codigo).toContain(`rastreador("init",{key:"${CHAVE}",endpoint:"https://crm.exemplo"});`);
+    expect(codigo).toContain('"https://crm.exemplo/rastreador.js"');
     expect(codigo.startsWith("<script>")).toBe(true);
     expect(codigo.endsWith("</script>")).toBe(true);
-    expect(codigo).not.toContain("//deskcomm-rastreador");
+    expect(codigo).not.toContain("//rastreador.js");
   });
 
   it("não carrega segredo nenhum: só a chave pública", () => {
@@ -176,7 +176,7 @@ describe("a seção", () => {
     await waitFor(() => expect(escrever).toHaveBeenCalledTimes(1));
     const copiado = String((escrever.mock.calls as unknown[][])[0]![0]);
     expect(copiado).toContain(CHAVE);
-    expect(copiado).toContain(`${window.location.origin}/deskcomm-rastreador.js`);
+    expect(copiado).toContain(`${window.location.origin}/rastreador.js`);
   });
 
   it("se copiar falha, o código abre na tela para copiar à mão", async () => {

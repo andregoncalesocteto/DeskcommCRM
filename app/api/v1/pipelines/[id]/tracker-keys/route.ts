@@ -71,7 +71,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     // A frase é fixa (é ela que `t()` traduz); a origem recusada entra depois, fora do `t()`.
     return fail(
       "validation_failed",
-      `${t("Origem não aceita: use https://seu-site.com.br, sem caminho (http só em localhost).")} («${origens.invalida}»)`,
+      `${t("Origem não aceita: use o endereço do site começando por https://, sem caminho (http só em localhost).")} («${origens.invalida}»)`,
       422,
       { requestId },
     );

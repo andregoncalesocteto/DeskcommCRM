@@ -35,6 +35,9 @@ vi.mock("@/app/app/settings/tenant/pipelines/_mapping", () => ({
   AgentMappingSection: () => null,
   ancoraDoMapeamento: () => "mapeamento",
 }));
+// As seções de eventos e do rastreador leem a API com react-query; este teste olha só o tipo de campo e a moeda.
+vi.mock("@/app/app/settings/tenant/pipelines/_eventos", () => ({ EventosDoFunilSection: () => null }));
+vi.mock("@/app/app/settings/tenant/pipelines/_rastreador", () => ({ RastreadorSection: () => null }));
 
 import { PipelinesClient, type PipelineRow } from "@/app/app/settings/tenant/pipelines/_client";
 import { CadastrarCampo } from "@/app/app/webhooks/_components/CadastrarCampo";
