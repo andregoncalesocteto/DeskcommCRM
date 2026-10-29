@@ -112,7 +112,7 @@ import {
   type CheckpointContent,
   type LeadCheckpointRow,
 } from "./abertura/checkpoint";
-import { buildOpeningMessage, ritualBlocks } from "./abertura/ritual";
+import { buildOpeningMessage, inboundsNaoRespondidos, ritualBlocks } from "./abertura/ritual";
 import { lerRemetenteDeGrupo, type RemetenteDeGrupo } from "@/lib/messaging/remetente-de-grupo";
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { buildCompromissosBlock } from './compromissos-do-contato';
@@ -735,6 +735,7 @@ export {
   parseCheckpointText,
   ritualBlocks,
   buildOpeningMessage,
+  inboundsNaoRespondidos,
 };
 export type { CheckpointContent, LeadCheckpointRow };
 
@@ -1515,43 +1516,6 @@ export function claimsCurrentInboundIsEmpty(candidate: string, currentInbound: s
     `\\b${messageReference}\\b[\\s\\S]{0,90}\\b${emptyClaim}\\b|\\b${emptyClaim}\\b[\\s\\S]{0,90}\\b${messageReference}\\b`,
     'i',
   ).test(candidate);
-}
-
-/**
- * Tudo que o cliente escreveu desde a última vez que ALGUÉM do nosso lado
- * respondeu — cada mensagem inteira, em ordem, nunca emendadas.
- *
- * ## Por que não basta "a última inbound"
- *
- * O drain COALESCE rajada: com `INBOUND_DEBOUNCE_MS` (default 8000), a segunda
- * mensagem do cliente não ganha job próprio — ela "entra de carona" no job da
- * primeira (`edge/crm/drain.ts`, "Coalescência"). O turno responde à mensagem que
- * o job aponta, e isso está certo; mas quem só olhasse essa mensagem não OUVIRIA
- * a segunda. Um cliente que escreve "oi" e, três segundos depois, "quero falar
- * com uma pessoa" tem que ser ouvido no segundo: calar um pedido de humano é
- * pior que o defeito que o pin do job veio consertar.
- *
- * ## Por que uma LISTA, e não um texto emendado
- *
- * `ehPalavraIsolada` (lib/opt-out/deteccao.ts) exige que a mensagem INTEIRA seja
- * a palavra-chave — é assim que "PARAR" descadastra e "tem como parar a dor?"
- * não. Emendar as mensagens da rajada num texto só destruiria exatamente essa
- * propriedade: "oi\nPARAR" não é palavra isolada, e o opt-out deixaria de
- * disparar. Quem consome isto roda o detector POR MENSAGEM.
- *
- * O corte é a última OUTBOUND (resposta de humano conta — ela também é do nosso
- * lado). Sem nenhuma outbound na janela, tudo que o cliente disse segue sem
- * resposta, e é isso que a lista devolve.
- */
-export function inboundsNaoRespondidos(messages: readonly LeadContextMessage[]): string[] {
-  const pendentes: string[] = [];
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const m = messages[i];
-    if (m === undefined) continue;
-    if (m.direction === 'outbound') break;
-    if (m.body.trim() !== '') pendentes.unshift(m.body);
-  }
-  return pendentes;
 }
 
 /**
