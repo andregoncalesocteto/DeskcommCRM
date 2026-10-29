@@ -7,6 +7,7 @@
  *
  *  · chave desconhecida, malformada ou revogada → 404, sem cabeçalhos de CORS (a mesma resposta para as três);
  *  · origem fora da lista da chave → 403, sem cabeçalhos de CORS: o navegador bloqueia a leitura;
+ *  · limite de taxa por IP e por chave (429 + `Retry-After`, com CORS);
  *  · o corpo é lido como texto (`sendBeacon` manda `text/plain` para não disparar preflight) e validado com Zod.
  *
  * O processamento reaproveita `registrarEventosDoFunil`, a mesma operação do `crm_track_event`: o evento só vale se o
@@ -15,15 +16,21 @@
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
+import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { fail, ok } from "@/lib/api/wrappers";
+import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { registrarEventosDoFunil } from "@/lib/leads/eventos-do-funil/registrar";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  JANELA_DO_LIMITE_SEGUNDOS,
+  LIMITE_POR_CHAVE_POR_MINUTO,
+  LIMITE_POR_IP_POR_MINUTO,
   MAX_BYTES_DO_CORPO,
   cabecalhosDeCors,
   corpoDaColetaSchema,
   origemPermitida,
   resolverChave,
+  segundosAteAJanelaAcabar,
 } from "@/lib/tracker/coleta";
 import { identificarPedido } from "@/lib/tracker/identificar-pedido";
 
@@ -58,6 +65,20 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const origem = origemPermitida(req.headers.get("origin"), chave);
   if (!origem) return fail("origin_not_allowed", "Origem não permitida para esta chave.", 403, { requestId });
   const cors = cabecalhosDeCors(origem);
+
+  // Dois contadores: o IP primeiro (um visitante ou robô não esgota a cota do site inteiro) e depois a chave. O 429
+  // leva CORS, porque a origem já foi conferida: sem ele o navegador esconderia o `Retry-After` do script.
+  const ip = ipDoCliente(req.headers) ?? "desconhecido";
+  const porIp = await checkRateLimit(`coleta:ip:${chave.id}:${ip}`, LIMITE_POR_IP_POR_MINUTO, JANELA_DO_LIMITE_SEGUNDOS);
+  const porChave = porIp.allowed
+    ? await checkRateLimit(`coleta:chave:${chave.id}`, LIMITE_POR_CHAVE_POR_MINUTO, JANELA_DO_LIMITE_SEGUNDOS)
+    : porIp;
+  if (!porIp.allowed || !porChave.allowed) {
+    return fail("rate_limited", "Muitas requisições. Tente de novo em instantes.", 429, {
+      requestId,
+      headers: { ...cors, "Retry-After": String(segundosAteAJanelaAcabar()) },
+    });
+  }
 
   const texto = await req.text().catch(() => "");
   if (texto.length === 0 || new TextEncoder().encode(texto).length > MAX_BYTES_DO_CORPO) {

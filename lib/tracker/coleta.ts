@@ -14,6 +14,11 @@ import { normalizarOrigem } from "./origens";
 export const MAX_EVENTOS_DO_NAVEGADOR = 20;
 export const MAX_BYTES_DO_CORPO = 64 * 1024;
 
+/** Requisições por minuto: a chave inteira (o site todo) e um mesmo IP numa mesma chave (um visitante, ou um robô). */
+export const LIMITE_POR_CHAVE_POR_MINUTO = 1200;
+export const LIMITE_POR_IP_POR_MINUTO = 60;
+export const JANELA_DO_LIMITE_SEGUNDOS = 60;
+
 export const FORMATO_DA_CHAVE = /^pk_[a-f0-9]{36}$/;
 
 /** O corpo do POST. `strict`: `organization_id`, `pipeline_id`, `lead_id` e qualquer outro campo são recusados. */
@@ -71,4 +76,10 @@ export function cabecalhosDeCors(origem: string): Record<string, string> {
     "Access-Control-Max-Age": "600",
     Vary: "Origin",
   };
+}
+
+/** Segundos até a janela atual do contador acabar (`Retry-After`): nunca menos de 1. */
+export function segundosAteAJanelaAcabar(agora = Date.now()): number {
+  const janelaMs = JANELA_DO_LIMITE_SEGUNDOS * 1000;
+  return Math.max(1, Math.ceil((janelaMs - (agora % janelaMs)) / 1000));
 }

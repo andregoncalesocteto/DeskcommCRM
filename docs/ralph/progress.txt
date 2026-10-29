@@ -220,3 +220,11 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `ok()` em lib/api/wrappers.ts aceita só status 200|201|204.
   - A chave pública no caminho permite CORS por chave no preflight; chave em corpo/header não permitiria.
 ---
+
+## 2026-10-29 - US-023
+- Limite de taxa na porta pública: por IP dentro da chave (60/min, balde `coleta:ip:<id da chave>:<ip>`) e por chave (1200/min, `coleta:chave:<id>`), via `checkRateLimit` (Redis, com contador em memória sem Upstash). 429 com `Retry-After` calculado até o fim da janela (1–60 s) E com CORS (a origem já foi conferida; sem CORS o navegador esconderia o Retry-After do script). Origem recusada e chave inválida nem gastam contador.
+- Resposta: sempre `{eventos:[{event_id, resultado:"recebido"}]}`. Provado: idtrack sem pedido e idtrack válido dão o MESMO corpo; id do pedido, etapa, valor, recusas ("evento_nao_cadastrado") nunca chegam ao navegador.
+- Testes: 32 na rota. Sabotagem (eco do resultado da operação no corpo): 3 vermelhos, os 3 casos de não-vazamento.
+- **Learnings for future iterations:**
+  - `vi.mocked(x).mockClear()` não limpa `mockRejectedValue` de um teste anterior: use `mockReset()` + valor padrão no beforeEach (o teste de uniformidade pegou 500 vs 200 por isso).
+---

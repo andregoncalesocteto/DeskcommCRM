@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
+import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { registrarEventosDoFunil } from "@/lib/leads/eventos-do-funil/registrar";
 import { identificarPedido } from "@/lib/tracker/identificar-pedido";
@@ -19,6 +20,7 @@ vi.mock("@/lib/leads/eventos-do-funil/registrar", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   registrarEventosDoFunil: vi.fn(async () => ({ lead_id: "x", resultados: [] })),
 }));
+vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: vi.fn() }));
 vi.mock("@/lib/tracker/identificar-pedido", () => ({ identificarPedido: vi.fn() }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -60,9 +62,12 @@ const preflight = (origin: string | null, chave = CHAVE) =>
 beforeEach(() => {
   vi.mocked(createAdminClient).mockReset();
   vi.mocked(createAdminClient).mockReturnValue(criarBancoFalso(tabelas() as never).client as never);
-  vi.mocked(registrarEventosDoFunil).mockClear();
+  vi.mocked(registrarEventosDoFunil).mockReset();
+  vi.mocked(registrarEventosDoFunil).mockResolvedValue({ lead_id: "x", resultados: [] });
   vi.mocked(identificarPedido).mockReset();
   vi.mocked(identificarPedido).mockResolvedValue(PEDIDO);
+  vi.mocked(checkRateLimit).mockReset();
+  vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true, count: 1, limit: 60, window_sec: 60 });
 });
 
 describe("o caminho é público para o proxy, e só o formato exato da chave", () => {
@@ -185,5 +190,84 @@ describe("POST", () => {
     expect(r.status).toBe(500);
     expect(JSON.stringify(await r.json())).not.toContain("detalhe interno");
     expect(r.headers.get("access-control-allow-origin")).toBe(ORIGEM);
+  });
+});
+
+describe("limite de taxa", () => {
+  const estourar = (balde: string) =>
+    vi.mocked(checkRateLimit).mockImplementation(async (b, limit) => ({
+      allowed: !b.startsWith(balde), count: limit + 1, limit, window_sec: 60,
+    }));
+
+  it("⭐ o contador por IP estourado: 429 com Retry-After (1 a 60) e CORS, sem registrar", async () => {
+    estourar("coleta:ip:");
+    const r = await post(corpo());
+    expect(r.status).toBe(429);
+    const espera = Number(r.headers.get("retry-after"));
+    expect(espera).toBeGreaterThanOrEqual(1);
+    expect(espera).toBeLessThanOrEqual(60);
+    expect(r.headers.get("access-control-allow-origin")).toBe(ORIGEM);
+    expect(registrarEventosDoFunil).not.toHaveBeenCalled();
+  });
+
+  it("⭐ o contador por chave estourado: 429 também", async () => {
+    estourar("coleta:chave:");
+    const r = await post(corpo());
+    expect(r.status).toBe(429);
+    expect(r.headers.get("retry-after")).not.toBeNull();
+    expect(registrarEventosDoFunil).not.toHaveBeenCalled();
+  });
+
+  it("os contadores levam a chave (não vazam de um site para outro) e o IP do cliente", async () => {
+    await POST(
+      new NextRequest(`http://localhost/api/v1/coleta/${CHAVE}`, {
+        method: "POST", body: corpo(), headers: { origin: ORIGEM, "x-forwarded-for": "203.0.113.9" },
+      }),
+      ctx(),
+    );
+    const baldes = vi.mocked(checkRateLimit).mock.calls.map((c) => c[0]);
+    expect(baldes).toContain("coleta:ip:k1:203.0.113.9");
+    expect(baldes).toContain("coleta:chave:k1");
+  });
+
+  it("origem recusada e chave desconhecida nem chegam a gastar contador", async () => {
+    await post(corpo(), "https://invasor.exemplo");
+    await post(corpo(), ORIGEM, "pk_malformada");
+    expect(checkRateLimit).not.toHaveBeenCalled();
+  });
+});
+
+describe("a resposta não vaza e não varia com o pedido", () => {
+  it("⭐ idtrack que não acha pedido e idtrack válido recebem o MESMO corpo, sem efeito na forma", async () => {
+    vi.mocked(identificarPedido).mockResolvedValue(PEDIDO);
+    const valido = await post(corpo());
+    vi.mocked(identificarPedido).mockResolvedValue(null);
+    const inexistente = await post(corpo({ idtrack: "ffffffff-ffff-4fff-8fff-ffffffffffff" }));
+    expect(inexistente.status).toBe(valido.status);
+    expect(await inexistente.json()).toEqual(await valido.json());
+  });
+
+  it("⭐ o que a operação devolve (id do pedido, etapa, valor, recusas) nunca chega ao navegador", async () => {
+    vi.mocked(registrarEventosDoFunil).mockResolvedValue({
+      lead_id: PEDIDO,
+      resultados: [
+        { event: "page_view", event_id: "e1", resultado: "registrado", estado: "aplicado", valor: "aplicado", movimento: "movido", etapa: "Compras" },
+      ],
+    } as never);
+    const texto = JSON.stringify(await (await post(corpo())).json());
+    expect(texto).not.toContain(PEDIDO);
+    expect(texto).not.toContain("Compras");
+    expect(texto).not.toContain("movido");
+    expect(JSON.parse(texto).data).toEqual({ eventos: [{ event_id: "e1", resultado: "recebido" }] });
+  });
+
+  it("evento que o funil recusaria também volta como recebido (a recusa não é oráculo)", async () => {
+    vi.mocked(registrarEventosDoFunil).mockResolvedValue({
+      lead_id: PEDIDO,
+      resultados: [{ event: "page_view", event_id: "e1", resultado: "recusado", codigo: "evento_nao_cadastrado", mensagem: "m" }],
+    } as never);
+    const j = await (await post(corpo())).json();
+    expect(j.data.eventos[0].resultado).toBe("recebido");
+    expect(JSON.stringify(j)).not.toContain("evento_nao_cadastrado");
   });
 });
