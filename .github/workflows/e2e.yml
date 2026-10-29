@@ -1497,6 +1497,7 @@ jobs:
         comercial-no-celular.spec.ts
         propostas-de-campos-do-card.spec.ts
         eventos-do-funil.spec.ts
+        rastreador-do-cardapio.spec.ts
       # Ambiente isolado: esta spec exige HMAC WAHA e Graph sintético no
       # processo next start. As demais partes preservam a configuração WAHA.
       #

@@ -3954,6 +3954,29 @@ porque depende do cadastro do primeiro).
 agente no meio); a porta pública e o plugin (etapa 2); o `proxy.ts` global só foi exercitado pelo cookie
 do gerente, não por bearer em rota REST.
 
+## J59 — O cardápio, em outro site, conta ao CRM o que o cliente faz `[P1]` (2026-10-29)
+
+Contexto: épico "Eventos do funil", etapa 2 (`docs/design/eventos-do-funil.md`). O gerente cria uma chave pública
+por funil, copia o código da própria tela e o cola no site do cardápio; o script manda os eventos pela porta pública
+`POST /api/v1/coleta/{chave}` e o pedido anda pelo funil. A chave é um endereço, não um segredo.
+
+Spec: `tests/e2e/rastreador-do-cardapio.spec.ts` (parte 7), login `manager`; o site do cardápio é um servidor HTTP
+real em outra porta (outra origem), aberto num navegador real. Evidência: `evidence/eventos-do-funil/e2e-rastreador-*.png`
+e `verificacao-no-navegador-us028.md`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J59.1 `[P1]` | Criar a chave pela tela e ver o código de instalação | sites normalizados, «Ainda não recebeu nenhum evento.», trecho com a chave e o endereço do CRM | a medir (CI) |
+| J59.2 `[P1]` | ⭐ Visita, item, carrinho, pagamento e compra pelo script | o pedido sai de Entrada e chega a Compras (`won`) com `value_cents` 7390; JSON em `pedido`, `cart` e `checkout`; histórico com `origem = navegador` e a `chave_id`; telefone, e-mail e nome ausentes | a medir (CI) |
+| J59.3 `[P1]` | Recarregar a página de sucesso | a compra do mesmo `order_id` não duplica (continua 1 linha) | a medir (CI) |
+| J59.4 `[P1]` | Compra sem carrinho antes | registrada no histórico, o pedido NÃO vai a Compras | a medir (CI) |
+| J59.5 | `idtrack` que é telefone | nenhuma requisição sai da página | a medir (CI) |
+| J59.6 | Origem não listada | 403 sem CORS, nada gravado | a medir (CI) |
+| J59.7 | Revogar a chave pela tela | a mesma página para de gravar na hora | a medir (CI) |
+
+**NÃO COBERTO, declarado:** celular e leitor de tela; navegadores além do Chromium; a porta atrás de um CDN ou de
+um proxy que reescreva `Origin`; a forja de um carrinho antes da compra (as travas limitam o estrago, não o impedem).
+
 ## Conferência integrada de correções — 26/10/2026
 
 [Registro do lote #3462](lote-3462-2026-10-26.md): oito contribuições provadas numa

@@ -270,3 +270,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `userEvent.setup()` instala o próprio dublê de `navigator.clipboard`: defina o seu DEPOIS do setup.
   - Script de dev-browser tem 30 s: a primeira compilação do `next dev` estoura; faça um curl de aquecimento antes.
 ---
+
+## 2026-10-29 - US-029
+- tests/e2e/rastreador-do-cardapio.spec.ts (parte 7): gerente cria a chave pela tela e copia o código; um servidor HTTP real em OUTRA porta serve a página com esse código; Chromium real abre com `?idtrack=`. Casos: fluxo até Compras (7390, JSON em pedido/cart/checkout, origem navegador, sem telefone/e-mail/nome — par: rede observada + banco), recarga sem duplicar, compra sem carrinho, idtrack telefone (zero requisições), origem não listada (bloqueio CORS), revogação. J59 no mapa de jornadas.
+- Rodada local real: 7 passam (28 s). Sabotagens no script (servido do disco, sem rebuild): sem filtro pessoal → 1 vermelho; sem validar UUID → 1 vermelho (previstos).
+- **Learnings for future iterations:**
+  - Função de `page.evaluate` roda no navegador: variáveis do teste vão como ARGUMENTO.
+  - Insert em lote no supabase-js: coluna ausente vira null (NOT NULL quebra): explicitar nos defaults.
+  - Chromium reporta resposta CORS bloqueada como requestfailed OU resposta sem ACAO: aceitar as duas.
+  - `public/` é lido do disco pelo `next start`: dá para sabotar o script sem rebuild.
+---
