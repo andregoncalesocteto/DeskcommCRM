@@ -26,6 +26,9 @@ services:
       - "${APP_PORT:-3000}:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - cloudflare-tunnel-net
     depends_on:
       waha:
         condition: service_healthy
@@ -181,3 +184,8 @@ services:
 volumes:
   waha-data:
   waha-media:
+
+networks:
+  cloudflare-tunnel-net:
+    name: cloudflare-tunnel_cloudflare-tunnel-net
+    external: true
