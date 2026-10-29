@@ -177,3 +177,12 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - `crm_stages` exige `is_won` e `is_lost` explícitos; `crm_pipeline_events` guarda o destino em `stage_id`.
   - Sabotar código de tela exige rebuild do e2e: planejar uma sabotagem só.
 ---
+
+## 2026-10-29 - US-019
+- .changes/eventos-do-funil-cadastro-e-ferramenta.md (capacidade_nova, texto de nota pública sem jargão); `pnpm release:conferir` lista o fragmento e sai 0; CHANGELOG.md intocado.
+- .business/bellacapri/integracao-mcp-cardapio.md: seção 5 virou 5-A (forma recomendada: cadastro à mão dos cinco eventos da Bella com chave, destino, guardar em, valor, repetição e flag; chamada, resultados, quando usar crm_track_event × crm_add_lead_events × crm_update_lead × crm_move_lead_stage) e 5-B (forma anterior, mantida). Nota "a recusa é definitiva: não reenvie" com os cinco códigos; nota em 4.5; linha nova na tabela de erros (recusa não é isError).
+- DoD 16: conferidos os documentos de autoridade sobre o comportamento mudado — spec 11 já atualizada em US-012; nenhum documento afirma contagem de ferramentas MCP (git grep vazio).
+- Honestidade do guia: crm_track_event NÃO preenche os campos legíveis da ficha (itens, qtd_itens, tipo_entrega…): continua crm_update_lead; cancelamento segue crm_move_lead_stage (destino não oferece etapa de perda).
+- **Learnings for future iterations:**
+  - Etapa 1 fechada (US-001…US-019). Etapa 2 começa na US-020; antes de cada migration conferir `pnpm checar:colisao-de-migration` (último número usado: 9040).
+---

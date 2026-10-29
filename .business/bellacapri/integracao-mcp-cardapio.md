@@ -218,6 +218,9 @@ Cuidados:
 
 ### 4.5 `crm_add_lead_events` — registro que só cresce (page_view, view_item)
 
+> **Para evento cadastrado no funil, prefira `crm_track_event` (seção 5-A).** Esta ferramenta continua existindo e é a
+> certa para o fato que o funil não cadastrou: ela aceita qualquer nome, só grava no histórico e **não** move o pedido.
+
 `crm_update_lead` **substitui** o campo; para o que precisa de **histórico** (cada visita, cada item visto) existe
 esta ferramenta. Cada evento vira uma **linha nova** na linha do tempo do pedido, com a hora em que aconteceu e o JSON
 que você mandou. Uma chamada nunca apaga nem substitui as anteriores.
@@ -285,6 +288,97 @@ a partir de um modelo de loja virtual: "Conversas" tem slug `carrinho_abandonado
 ---
 
 ## 5. Etapas do funil e eventos do cardápio
+
+> **Há duas formas de contar um evento ao CRM, e a seção 5-A é a recomendada.** A forma anterior (a ferramenta de cada
+> etapa chamada à mão, com o mapa e a trava de "não retrocede" no cardápio) continua funcionando e está descrita logo
+> depois da 5-A. Quem já a usa não precisa mudar de uma vez.
+
+### 5-A. A forma recomendada: `crm_track_event` com os eventos cadastrados no funil
+
+Em vez de o cardápio decidir, a cada evento, qual ferramenta chamar e para que etapa mover, **a loja cadastra uma vez,
+na tela, os eventos que o funil aceita e para onde o pedido vai quando cada um chega**. O cardápio só conta o que
+aconteceu, numa ferramenta só: `crm_track_event`. O CRM grava no histórico, guarda o último conteúdo, aplica o valor e
+move o pedido, e **nunca o faz retroceder**.
+
+**Cadastro (uma vez por loja):** `/app/settings/tenant/pipelines` › o funil **Pedidos** › seção **Para onde o card vai em
+cada evento** › **Cadastrar um evento**. Nada vem pronto: cadastre à mão os cinco abaixo. Opções avançadas ficam
+escondidas atrás de «Mostrar as opções avançadas».
+
+| Nome na tela | Chave que o cardápio envia | O card vai para | Guardar o último conteúdo em | Campo do valor | Reconhecer o mesmo fato por | Respeitar o que a equipe moveu à mão |
+|---|---|---|---|---|---|---|
+| Visita | `page_view` | Visitas | — | — | — | ligado |
+| Item visto | `view_item` | Visualizações | — | — | — | ligado |
+| Carrinho | `cart_sync` | Carrinho | `cart` | — | — | ligado |
+| Início do pagamento | `begin_checkout` | Revisão | `checkout` | `value` (em reais) | — | ligado |
+| Compra concluída | `purchase` | Compras | `pedido` | `value` (em reais) | `order_id` | **desligado** |
+
+Por que a compra é a única com «respeitar» desligado: ela precisa fechar a venda mesmo que alguém da equipe tenha movido
+o pedido à mão depois (por exemplo, para Chamar Humano). Nos outros, se uma pessoa mexeu por último, o evento é gravado
+mas não move.
+
+Cuidados no cadastro:
+- «Guardar em» **não pode** ter o mesmo nome de um campo da ficha (`cupom`, `itens`, `qtd_itens`…); `cart`, `checkout`
+  e `pedido` são chaves livres, como na forma anterior. A tela bloqueia o conflito.
+- Dois eventos guardando no **mesmo** «guardar em» só geram um aviso: o último que chegar sobrescreve o outro.
+- O «Compra concluída» fecha a venda, então **precisa** do campo do valor; sem ele a tela avisa que a venda não será
+  enviada como conversão.
+- A chave de um evento que já recebeu algo não muda mais. Para parar de aceitar, **desative** (não apaga o histórico).
+- O destino não oferece etapa de perda: o **cancelamento** continua por `crm_move_lead_stage` com `lost_reason`
+  (seção 4.3), chamado só pelo servidor do cardápio.
+
+**A chamada** (uma por lote, até 50 eventos, do mais antigo ao mais novo):
+
+```json
+{
+  "lead_id": "<id do pedido>",
+  "events": [
+    { "event": "purchase", "event_id": "<id estável do fato>", "at": "2026-10-29T18:28:00-03:00",
+      "data": { "order_id": "P-1042", "value": "73.90", "delivery_type": "delivery", "items": [] } }
+  ]
+}
+```
+
+`event_id` é **obrigatório** (diferente do `crm_add_lead_events`). `at` e `data` são opcionais. O valor aceita número ou
+texto decimal («73.90»), sem teto.
+
+**A resposta** traz **um resultado por evento**, na ordem enviada; um evento recusado nunca derruba os outros do lote:
+
+| `resultado` | Significa | O que fazer |
+|---|---|---|
+| `registrado` | gravado; veja `estado`, `valor` e `movimento` (e `etapa` quando o pedido se moveu) | nada |
+| `repetido` | o mesmo `event_id` (ou o mesmo `order_id`) já tinha chegado | nada: não é erro |
+| `recusado` | não foi gravado; vem com `codigo` e `mensagem` | **não reenvie** (abaixo) |
+
+> **A recusa é definitiva: não reenvie o mesmo evento esperando outro resultado.** Os códigos são
+> `evento_nao_cadastrado` (a mensagem lista as chaves ativas do funil), `evento_inativo`, `evento_grande`,
+> `hora_fora_da_janela` e `valor_invalido`. Reenviar devolve a mesma recusa e gasta uma escrita do teto. O conserto é
+> **cadastrar ou ativar o evento na tela**, ou corrigir o dado no cardápio, e só então mandar um fato **novo**. Erro de
+> rede ou 5xx é outra coisa: repita com o **mesmo** `event_id`, que é seguro.
+
+`movimento` diz o que aconteceu com a etapa: `movido`, `ja_na_etapa_ou_adiante` (o pedido já estava naquela etapa ou
+além: **não retrocede**), `respeita_movimento_manual`, `pedido_encerrado`, `sem_destino`, `etapa_arquivada`, `conflito`
+ou `recusado_pelo_funil`. Pedido já em **Compras** ou **Cancelado** não muda de etapa, de valor nem de estado, mas o
+histórico continua sendo gravado.
+
+**Quando usar cada ferramenta de escrita de evento**
+
+| Situação | Ferramenta |
+|---|---|
+| O funil cadastrou o evento (os cinco acima) | **`crm_track_event`** |
+| Fato que o funil **não** cadastrou e que só interessa guardar no histórico | `crm_add_lead_events` (permissiva: aceita qualquer nome válido, não move, não guarda estado nem valor) |
+| Campos da ficha (`itens`, `qtd_itens`, `tipo_entrega`, `cupom`, `forma_pagamento`, `subtotal_cents`, `frete_cents`, `desconto_cents`, `id_pedido_cardapio`) | `crm_update_lead` — o `crm_track_event` **não** preenche esses campos, só o conteúdo em «guardar em» e o valor |
+| Cancelamento | `crm_move_lead_stage` com `lost_reason` |
+
+Ou seja: quem quer a ficha legível (itens em texto, tipo de entrega…) segue mandando um `crm_update_lead` junto, ou lê o
+JSON guardado em `cart`, `checkout` e `pedido`. Cada chamada de `crm_track_event` conta **uma** escrita (teto de 30/min por
+token), qualquer que seja o tamanho do lote.
+
+**Comparação rápida:** pela forma anterior, um pedido típico gasta ~9 escritas e a trava de "não retrocede" mora no
+cardápio; com o `crm_track_event`, o mesmo pedido pode ser contado em ~5 chamadas (uma por evento, ou menos se agrupar) e a
+trava mora no CRM. Medido ao vivo em 29/10/2026 (`evidence/eventos-do-funil/prova-mcp-direto-us012.md`), 12 passos, e
+pela tela em `evidence/eventos-do-funil/verificacao-no-navegador-us016-us017.md`.
+
+### 5-B. A forma anterior (continua válida)
 
 Funil **Pedidos**. Quem avança cada etapa é o cardápio, exceto Conversas (nasce lá) e Chamar Humano (passagem da
 Bella para a equipe).
@@ -477,6 +571,7 @@ cada evento repetido. `crm_add_lead_events`, `crm_update_lead` e `crm_move_lead_
 | Lote de eventos inválido (vazio, mais de 50, evento grande, hora no futuro ou com mais de 30 dias) | `isError: true`, a mensagem diz qual evento (`Evento #2 …`) |
 | Nome de evento fora do padrão / chave desconhecida | `isError: true`, "Input validation error…" |
 | Pedido de outra loja ou inexistente | `isError: true`, "Pedido não encontrado." |
+| `crm_track_event` com evento não cadastrado, inativo, grande, fora da janela ou com valor inválido | **não** é `isError`: a resposta vem com `resultado: "recusado"` naquele evento e um `codigo` (definitivo: não reenvie) |
 
 Boas práticas:
 - Trate o 401 como **alarme** (token revogado ou expirado) e não como "tente de novo".
