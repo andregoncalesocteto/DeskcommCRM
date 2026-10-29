@@ -6884,6 +6884,82 @@ export type Database = {
           },
         ];
       };
+      crm_pipeline_events: {
+        Row: {
+          created_at: string;
+          dedupe_path: string | null;
+          description: string | null;
+          id: string;
+          is_active: boolean;
+          key: string;
+          label: string;
+          organization_id: string;
+          pipeline_id: string;
+          respects_manual_move: boolean;
+          stage_id: string | null;
+          state_key: string | null;
+          updated_at: string;
+          value_path: string | null;
+          value_unit: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          dedupe_path?: string | null;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          key: string;
+          label: string;
+          organization_id: string;
+          pipeline_id: string;
+          respects_manual_move?: boolean;
+          stage_id?: string | null;
+          state_key?: string | null;
+          updated_at?: string;
+          value_path?: string | null;
+          value_unit?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          dedupe_path?: string | null;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          key?: string;
+          label?: string;
+          organization_id?: string;
+          pipeline_id?: string;
+          respects_manual_move?: boolean;
+          stage_id?: string | null;
+          state_key?: string | null;
+          updated_at?: string;
+          value_path?: string | null;
+          value_unit?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "crm_pipeline_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_pipeline_events_pipeline_id_fkey";
+            columns: ["pipeline_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_pipelines";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_pipeline_events_stage_id_fkey";
+            columns: ["stage_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_stages";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crm_pipelines: {
         Row: {
           created_at: string;

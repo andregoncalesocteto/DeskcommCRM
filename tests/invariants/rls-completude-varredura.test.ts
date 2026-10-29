@@ -98,6 +98,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
   { tabela: "appointment_recovery_receipts", razao: "tests/invariants/agenda-presenca-acl.test.ts — leitura/escrita direta anon/authenticated negadas, escrita service_role negada e RPC service-only valida a tupla org/evento nos dois sentidos A/B" },
   { tabela: "event_service_origins", razao: "tests/invariants/service-event-origin.test.ts — recibo server-only, authenticated sem leitura/escrita, RPC rejeita tenant B real" },
   { tabela: "platform_support_sessions", razao: "tests/invariants/suporte-temporario.test.ts — grant por sessão, readonly e nenhuma escrita direta authenticated" },
+  { tabela: "crm_pipeline_events", razao: "tests/invariants/eventos-do-funil-isolamento-e-contrato.test.ts (migration 9039) — dois tenants reais por JWT: leitura local e ZERO do vizinho; manager de uma organização não insere, edita nem apaga na outra; viewer e agent não escrevem nem apagam; anon sem privilégio; trava de suporte plantada" },
   {
     tabela: "crm_proposal_counters",
     razao:

@@ -19,3 +19,18 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - crm_lead_activities não é append-only (service_role tem UPDATE/DELETE); a remoção só ocorre em cascata (lead/organização).
   - actorParaAtividade: user→'user', ai_agent→'ai', demais (api_token, webhook_source)→'system'.
 ---
+
+## 2026-10-29 - US-002 e US-003 (commit único: a varredura de RLS exige a tabela e a prova juntas)
+- Migration 20261029190000_9039_eventos_do_funil_cadastro.sql: tabela crm_pipeline_events (14 colunas, 9 constraints nomeadas, FK stage_id on delete set null, índices, trigger de updated_at), RLS em duas políticas (select por membro; escrita por manager+), revoke de anon, fn_aplicar_travas_de_suporte() no fim. Espelhada no baseline.sql antes do bloco VARREDURA anon. Tipos do banco acrescentados em lib/database.types.ts (gerados por `supabase gen types` e convertidos ao estilo com ponto e vírgula do arquivo).
+- Teste novo tests/invariants/eventos-do-funil-isolamento-e-contrato.test.ts (26 casos): isolamento entre duas organizações, piso de papel, constraints, FK, trava de suporte. Registrado em PROVA_PROPRIA de tests/invariants/rls-completude-varredura.test.ts.
+- A main do produto estava 195 commits à frente (migrations até 9038); trouxe por merge (c5f107b13) e renumerei a migration para 9039.
+- Sabotagem: policy de leitura sem filtro de organização + escrita sem fn_role_at_least deixa exatamente 3 dos 26 casos vermelhos (previsto 3).
+- Provado: `pnpm test:db` completo antes do registro em PROVA_PROPRIA (533/534, a única falha era a varredura); depois, os dois arquivos relevantes passam (143 testes), mais instalação, atualização e update.sh da v1.94.0.
+- **Learnings for future iterations:**
+  - `pnpm test:db` exige `CONFERENCIA_KIT_RELEASE=v1.94.0` neste ambiente (não há gh). Aceita arquivos de teste como argumento.
+  - Tabela tenant-aware nova precisa entrar em TABLES (rls-isolation.test.ts) ou em PROVA_PROPRIA (rls-completude-varredura.test.ts) no mesmo commit da migration.
+  - O baseline espelha a migration por inclusão exata (tests/unit/apendice-do-baseline-espelha-a-migration.test.ts); apêndice novo entra antes do bloco "VARREDURA anon".
+  - Política de escrita `for all` com USING só de organização deixaria um viewer apagar: separar leitura (membro) de escrita (manager+).
+  - `pnpm checar:colisao-de-migration` mede contra o `origin/main` do fork (defasado); usar `git ls-tree produto/main` para o teto real. Sem `gh`, PRs abertos não são medidos.
+  - A migration já foi aplicada no banco da stack local (tabela vazia), para as provas ao vivo.
+---
