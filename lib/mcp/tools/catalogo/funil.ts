@@ -103,6 +103,16 @@ export const TOOLS_FUNIL = declararTools([
     pacotes: ["organizar"],
   },
   {
+    name: "crm_list_pipeline_events",
+    category: "read",
+    rotulo: "Ver os eventos que um funil aceita",
+    explicacao:
+      "Mostra os eventos que o funil aceita de sistemas de fora, com a etapa para onde o card vai em cada um, para quem integra usar os nomes certos.",
+    oQueToca: "Funil de vendas",
+    risco: "seguro",
+    pacotes: ["organizar"],
+  },
+  {
     name: "crm_track_event",
     category: "write",
     rotulo: "Registrar o que o cliente fez fora do CRM",

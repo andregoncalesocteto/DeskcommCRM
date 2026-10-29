@@ -28,6 +28,7 @@ import {
   eventoExternoSchema,
   registrarEventosDoNegocio,
 } from "@/lib/leads/eventos-externos";
+import { listarEventosDoFunil } from "@/lib/leads/eventos-do-funil/listar";
 import { eventoDoFunilSchema, registrarEventosDoFunil } from "@/lib/leads/eventos-do-funil/registrar";
 import { conferirCamposPersonalizados } from "../conferencia-de-campos";
 import { proporCamposDoNegocio } from "@/lib/leads/proposta-de-campos-por-documento";
@@ -568,6 +569,27 @@ const trackEventInputShape = {
         "(OBRIGATÓRIO: id do fato na origem; com ele reenviar não duplica), `at` (quando aconteceu, ISO-8601 com " +
         "fuso; ausente = agora) e `data` (o JSON do fato).",
     ),
+};
+
+const listPipelineEventsInputShape = {
+  pipeline_id: z.string().uuid().describe("UUID do funil (consulte crm_list_pipelines)."),
+};
+
+export const crmListPipelineEvents: McpToolDefinition<typeof listPipelineEventsInputShape> = {
+  name: "crm_list_pipeline_events",
+  description:
+    "Lista os eventos que um funil aceita de sistemas de fora (os cadastrados em Configurações › Funis), para você " +
+    "usar as chaves certas em crm_track_event em vez de adivinhar. Para cada evento: `key` (o que enviar em `event`), " +
+    "`label`, `ativo`, `etapa` (o NOME da etapa para onde o card vai, ou null se o evento só registra), " +
+    "`respeita_movimento_manual`, `guarda_estado` (guarda o último conteúdo no pedido), `define_valor` (lê o valor da " +
+    "venda) e `repete_por_negocio` (reconhece o mesmo fato, como o mesmo número de pedido, como repetição). Não " +
+    "devolve ids de etapa. Evento desativado aparece com `ativo: false` e é recusado por crm_track_event.",
+  inputSchema: listPipelineEventsInputShape,
+  category: "read",
+  requiresRole: "agent",
+  requiresScope: "mcp:read",
+  handler: async (input, ctx) =>
+    listarEventosDoFunil(ctx.supabase, ctx.organizationId, input.pipeline_id, ctx.requestId),
 };
 
 export const crmTrackEvent: McpToolDefinition<typeof trackEventInputShape> = {

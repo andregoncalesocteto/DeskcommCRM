@@ -26,6 +26,7 @@ import {
   crmMoveLeadStage,
   crmAddLeadEvents,
   crmTrackEvent,
+  crmListPipelineEvents,
   crmRetomarLead,
   crmProposeLeadFieldsFromDocument,
 } from "./leads";
@@ -163,6 +164,7 @@ export const allTools: ReadonlyArray<McpToolDefinition> = [
   crmMoveLeadStage,
   crmAddLeadEvents,
   crmTrackEvent,
+  crmListPipelineEvents,
   crmRetomarLead,
   crmProposeLeadFieldsFromDocument,
   crmSendWhatsappMessage,

@@ -103,3 +103,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - O fake de banco dos testes precisa de `order`, `limit` e `in` para as leituras de etapas e do ator; o insert também grava na tabela, para as leituras seguintes enxergarem o lote.
   - O registro `crm_stages` do `moveLeadHandler` real é lido de novo; a operação lê as etapas só uma vez por chamada.
 ---
+
+## 2026-10-29 - US-011
+- crm_list_pipeline_events (leitura, agent, mcp:read): lib/leads/eventos-do-funil/listar.ts. Devolve key, label, description, ativo, etapa (NOME, nunca id), respeita_movimento_manual, guarda_estado, define_valor, repete_por_negocio, em ordem de chave. Funil de outra organização → 404; cadastro e etapa só da mesma organização.
+- Registrada em index.ts e em catalogo/funil.ts (risco 'seguro', pacote 'organizar'). Ferramenta de leitura não pede escopo-das-escritas nem escopo-de-funil.
+- docs/specs/11-spec-mcp-server-internal.md: seções novas de crm_track_event e crm_list_pipeline_events; corrigida a afirmação de que duas chamadas simultâneas com o mesmo event_id podiam passar as duas (o índice da US-004 as impede; DoD 16). crm_add_lead_events segue permissiva e a spec diz quando usar cada uma.
+- tests/unit/eventos-do-funil-listar.test.ts (8 casos). Sabotagens: sem filtro de organização do funil → 1 (previsto 1); sem filtro nas etapas → 1 (1); vazar o id da etapa → 3 (previsto 1: o vazamento também quebra a forma da lista e o nome da etapa).
+- Gates passando: catalogo-servido, escrita-do-turno-escopo, escopo-de-funil, capacidade-alcancavel-pelo-agente, catalogo-tools-leigo-friendly, entrega-de-capacidade, documentacao-aponta-para-o-que-existe.
+- **Learnings for future iterations:**
+  - Ferramenta de leitura nova: allTools + catalogo (risco 'seguro') bastam; as listas de escopo são só de escrita.
+---

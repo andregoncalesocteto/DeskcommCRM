@@ -304,9 +304,66 @@ inputSchema: z.object({
   A chamada conta **uma** escrita no teto do token (30/min), qualquer que seja o lote.
 - **Não esquenta o negócio**: `external_event` não está na lista positiva de `fn_update_last_activity_at`.
 - **Recusa** pedido de outra organização (404) e de contato marcado como pessoal (403 `contato_pessoal`).
-- **Reenvio**: sem `event_id` não há como reconhecer o evento repetido. Duas chamadas simultâneas com o mesmo
-  `event_id` podem passar as duas (a checagem é ler e inserir, sem trava).
+- **Reenvio**: sem `event_id` não há como reconhecer o evento repetido. Com `event_id`, o reenvio volta como
+  `repetidos`, e duas chamadas simultâneas com o mesmo `event_id` também: o índice único
+  `uniq_lead_activities_external_event_id` (migration 9040) recusa a segunda inserção com `23505`, que a ferramenta
+  conta como repetido. O escopo do índice é o pedido (organização + lead + `event_id`).
+- Permissiva por desenho: aceita **qualquer** nome de evento que respeite o padrão. Para validar contra o cadastro de
+  eventos do funil, e para guardar estado, valor e mover a etapa, use `crm_track_event`.
 - Papel `agent`, escopo `mcp:write`. Regra em `lib/leads/eventos-externos.ts`.
+
+#### `crm_track_event`
+**No REST mirror** — porta de máquina da integração, **estrita**: só aceita evento cadastrado e ativo no funil do pedido
+(`crm_pipeline_events`, cadastrado em Configurações › Funis; ADR-0007 e ADR-0009 em `docs/adr/`).
+
+```ts
+inputSchema: z.object({
+  lead_id: z.string().uuid(),
+  events: z.array(z.strictObject({
+    event: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),    // a chave cadastrada no funil
+    event_id: z.string().min(1).max(100),                  // OBRIGATÓRIO
+    at: z.string().datetime({ offset: true }).optional(),  // ISO-8601 com fuso; ausente = agora
+    data: z.record(z.string(), z.unknown()).optional()     // o JSON do fato
+  })).min(1).max(50)
+})
+// => { lead_id, resultados: [ { event, event_id, resultado, ... } ] }   // um por evento, na ordem enviada
+```
+
+- **Resultado por evento**: `registrado`, `repetido` ou `recusado` (com `codigo` e `mensagem`). Recusar um evento nunca
+  derruba os outros do lote. Códigos: `evento_nao_cadastrado` (a mensagem lista as chaves ativas do funil),
+  `evento_inativo`, `evento_grande`, `hora_fora_da_janela`, `valor_invalido`. **Uma recusa é definitiva**: não reenvie.
+- **Efeito no pedido** (`registrado`, e `repetido` quando o `event_id` já estava gravado e foi reaplicado):
+  `estado` (`aplicado`, `sem_state_key`, `ignorado_antigo`, `ignorado_pedido_encerrado`), `valor` (`aplicado`,
+  `sem_campo`, `ignorado_pedido_encerrado`) e `movimento` (`movido`, `sem_destino`, `ja_na_etapa_ou_adiante`,
+  `respeita_movimento_manual`, `pedido_encerrado`, `etapa_arquivada`, `conflito`, `recusado_pelo_funil`), com `etapa`
+  (o nome) quando o card se moveu.
+- **Ordem**: histórico (`external_event` com `performed_at` = hora do evento) → estado e valor numa só atualização do
+  pedido (`updateLeadHandler`) → movimento (`moveLeadHandler`). O histórico é a fonte de verdade; `custom_fields` e
+  `value_cents` são projeção (ADR-0008). O estado só substitui o anterior se a hora do evento for igual ou mais nova
+  que a do último da mesma chave.
+- **Repetição**: por `event_id` e, com `dedupe_path` cadastrado, pelo fato de negócio (o mesmo `order_id` com outro
+  `event_id` volta como `repetido` e não faz mais nada).
+- **Não retrocede**: dentro do conjunto de etapas de destino do funil o card só avança para posição maior; fora dele
+  (Conversas, "Chamar humano") pode seguir. Com `respects_manual_move`, se o último movimento foi de uma pessoa
+  (`actor_kind = 'user'`), o evento registra e não move. Pedido encerrado não se move.
+- **Tetos e recusas do lote**: 50 eventos, 8 KB por evento, 64 KB por chamada, `at` entre 30 dias atrás e +5 min;
+  uma escrita no teto do token (30/min) por chamada. Lote vazio, acima de 50 ou de 64 KB: 422 (a chamada inteira).
+  Pedido de outra organização: 404. Contato pessoal: 403 `contato_pessoal`.
+- Papel `agent`, escopo `mcp:write`. Regra em `lib/leads/eventos-do-funil/` (`registrar.ts`, `decisao-de-movimento.ts`,
+  `caminho-e-valor.ts`).
+
+#### `crm_list_pipeline_events`
+Leitura do cadastro: as chaves que um funil aceita, para quem integra consultar em vez de adivinhar.
+
+```ts
+inputSchema: z.object({ pipeline_id: z.string().uuid() })
+// => { pipeline_id, eventos: [ { key, label, description, ativo, etapa, respeita_movimento_manual,
+//                                guarda_estado, define_valor, repete_por_negocio } ] }
+```
+
+- `etapa` é o **nome** da etapa de destino (ou `null` se o evento só registra). Nunca devolve ids de etapa.
+- Evento desativado aparece com `ativo: false` e é recusado por `crm_track_event`.
+- Funil de outra organização: 404. Papel `agent`, escopo `mcp:read`. Regra em `lib/leads/eventos-do-funil/listar.ts`.
 
 ### 3.3 Tool especial (sem espelho REST)
 
