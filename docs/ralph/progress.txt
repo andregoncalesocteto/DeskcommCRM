@@ -122,3 +122,14 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Para provar código da branch sem reconstruir a stack: `pnpm exec next dev -p 3100` (mesmo .env.local); depois `pkill -f "[n]ext dev -p 3100"` e `git checkout -- AGENTS.md` (o next dev reescreve o arquivo).
   - Um script único que cria token/pedidos, roda o roteiro e limpa em `finally` evita sobras.
 ---
+
+## 2026-10-29 - US-013
+- GET /api/v1/pipelines/[id]/events (app/api/v1/pipelines/[id]/events/route.ts) + lib/leads/eventos-do-funil/cadastro.ts: lista o cadastro do funil em ordem de chave, cada evento com `ultimo_recebimento` (performed_at mais recente) e `recebidos_7_dias`, lidos do histórico. requireRole('manager'), cliente do usuário (RLS vale), organization_id da sessão; funil de outra organização → 404 igual ao inexistente.
+- A consulta de uso usa `select("performed_at, lead:crm_leads!inner(pipeline_id)", { count: "exact" })` + `.eq("lead.pipeline_id", ...)`, porque crm_lead_activities não tem coluna de funil. Conferido contra o PostgREST real da stack local (filtra pelo funil, conta exato, funil errado zera).
+- tests/helpers/banco-falso-de-eventos.ts (novo): dublê reutilizável que aplica eq/gte/in/order/limit/count/`payload->>campo`/junção; será usado pelas rotas de criar/editar. app/api/v1/pipelines/[id]/events/route.test.ts: 8 casos.
+- Sabotagens (5, todas 1 vermelho como previsto): cadastro sem filtro de organização, uso sem o filtro do funil, sem ordenar por chave, funil sem filtro de organização, semana sem a janela de 7 dias.
+- 60 suítes que varrem app/api/v1 passam (654 testes).
+- **Learnings for future iterations:**
+  - O dublê exporta `OpcoesDoBancoFalso`; ao tipar `erroEm` num teste, usar `OpcoesDoBancoFalso["erroEm"]` (Parameters<typeof ...>[1] dá erro com o parâmetro opcional).
+  - Rota nova de GET não pede requireSupportWrite; as de POST/PATCH/DELETE pedem (gate suporte-cobertura-de-efeitos).
+---
