@@ -113,6 +113,7 @@ import {
   type LeadCheckpointRow,
 } from "./abertura/checkpoint";
 import { buildOpeningMessage, inboundsNaoRespondidos, ritualBlocks } from "./abertura/ritual";
+import { preencherMarcadorDoContato } from "./marcador-do-contato";
 import { lerRemetenteDeGrupo, type RemetenteDeGrupo } from "@/lib/messaging/remetente-de-grupo";
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { buildCompromissosBlock } from './compromissos-do-contato';
@@ -3762,7 +3763,9 @@ async function executarTurnoDoAgente(
         // `**negrito**` de Markdown na tela do cliente. Antes de qualquer gate,
         // para que o corpo vazio, as bolhas e a pausa humana meçam o que sai.
         // Ver `formato-whatsapp.ts`.
-        const body = formatarParaWhatsApp(corpoDoModelo);
+        // O marcador do contato é preenchido AQUI, antes de qualquer gate: o texto
+        // que os gates medem é o que o cliente vai ler. Ver `marcador-do-contato.ts`.
+        const body = formatarParaWhatsApp(preencherMarcadorDoContato(corpoDoModelo, leadId));
         // CORPO VAZIO NÃO SAI. Medido ao vivo (2026-09-19): o `gpt-4o-mini`
         // chamou `send_message` várias vezes com corpo que virou vazio e o
         // WhatsApp do cliente recebeu bolhas em branco. O schema garante
