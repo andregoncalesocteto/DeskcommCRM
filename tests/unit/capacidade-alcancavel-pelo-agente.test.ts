@@ -90,6 +90,11 @@ const ESCRITA_QUE_E_TRABALHO_DE_ATENDENTE: ReadonlyArray<string> = [
   // `last_activity_at` usa lista positiva. Recusa pedido de contato pessoal e
   // pedido de outra organização.
   "crm_add_lead_events",
+  // Sem espelho REST: porta de máquina da integração, como crm_add_lead_events, validada contra o
+  // cadastro de eventos do funil. A autoridade é a de quem já escreve o card (`agent`): o histórico
+  // e, nas etapas seguintes da feature, os campos e a etapa do pedido, que o PATCH e o move do card
+  // já permitem a esse papel. Recusa pedido de contato pessoal e de outra organização.
+  "crm_track_event",
   // `app/api/v1/messages/` — exige `agent`. Responder cliente é o trabalho do dia.
   "crm_send_whatsapp_message",
   // `app/api/v1/ai/cases/[id]/reply/` — POST exige `agent`. Registrar no chamado

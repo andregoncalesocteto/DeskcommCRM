@@ -103,6 +103,18 @@ export const TOOLS_FUNIL = declararTools([
     pacotes: ["organizar"],
   },
   {
+    name: "crm_track_event",
+    category: "write",
+    rotulo: "Registrar o que o cliente fez fora do CRM",
+    explicacao:
+      "Conta ao CRM o que o cliente fez num sistema de fora, como ver um item, montar o carrinho ou comprar. Cada fato fica no histórico do pedido, e o que mais acontece (guardar o último carrinho, o valor, mover o card) segue o cadastro de eventos do funil.",
+    oQueToca: "Histórico, dados e etapa do pedido",
+    risco: "atencao",
+    // "organizar", como crm_add_lead_events: quem usa é uma integração (cardápio, loja virtual),
+    // não o agente que conversa, e em "vender" ela entraria no agente que nasce no onboarding.
+    pacotes: ["organizar"],
+  },
+  {
     name: "crm_retomar_lead",
     category: "write",
     rotulo: "Retomar negócio encerrado como novo",

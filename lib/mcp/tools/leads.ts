@@ -28,6 +28,7 @@ import {
   eventoExternoSchema,
   registrarEventosDoNegocio,
 } from "@/lib/leads/eventos-externos";
+import { eventoDoFunilSchema, registrarEventosDoFunil } from "@/lib/leads/eventos-do-funil/registrar";
 import { conferirCamposPersonalizados } from "../conferencia-de-campos";
 import { proporCamposDoNegocio } from "@/lib/leads/proposta-de-campos-por-documento";
 import { audit } from "@/lib/audit";
@@ -553,6 +554,49 @@ const addEventsInputShape = {
       "Os eventos, do mais antigo ao mais novo. Cada um: `event` (nome do fato, ex.: page_view), `at` (quando " +
         "aconteceu, ISO-8601; ausente = agora), `event_id` (id do fato na origem; com ele, reenviar não duplica) e " +
         "`data` (o JSON do fato).",
+    ),
+};
+
+const trackEventInputShape = {
+  lead_id: z.string().uuid().describe("UUID do pedido (negócio) que recebe os eventos."),
+  events: z
+    .array(eventoDoFunilSchema)
+    .min(1)
+    .max(MAX_EVENTOS_POR_CHAMADA)
+    .describe(
+      "Os fatos, do mais antigo ao mais novo. Cada um: `event` (a chave cadastrada no funil), `event_id` " +
+        "(OBRIGATÓRIO: id do fato na origem; com ele reenviar não duplica), `at` (quando aconteceu, ISO-8601 com " +
+        "fuso; ausente = agora) e `data` (o JSON do fato).",
+    ),
+};
+
+export const crmTrackEvent: McpToolDefinition<typeof trackEventInputShape> = {
+  name: "crm_track_event",
+  description:
+    "Conta ao CRM o que o cliente fez num sistema de fora (viu um item, montou o carrinho, comprou) e responde o que " +
+    "aconteceu com CADA evento, na ordem enviada: `registrado`, `repetido` ou `recusado` (com `codigo` e `mensagem`). " +
+    "Só aceita evento CADASTRADO e ativo no funil do pedido (consulte as chaves com crm_list_pipeline_events): evento " +
+    "desconhecido é recusado e a mensagem lista as chaves válidas, sem derrubar os outros do lote. Cada evento aceito " +
+    "vira uma linha no histórico do pedido com a hora em que aconteceu. `event_id` é obrigatório: reenviar o mesmo " +
+    "`event_id` no mesmo pedido volta como `repetido`. Até 50 eventos por chamada, 8 KB por evento, 64 KB por " +
+    "chamada, hora do evento de no máximo 30 dias atrás. A chamada inteira conta UMA escrita no teto do token, " +
+    "qualquer que seja o lote. Pedido de contato marcado como pessoal é recusado. Uma recusa é definitiva: não " +
+    "reenvie o mesmo evento esperando outro resultado. Para registrar qualquer nome de evento sem cadastro, use " +
+    "crm_add_lead_events.",
+  inputSchema: trackEventInputShape,
+  category: "write",
+  requiresRole: "agent",
+  requiresScope: "mcp:write",
+  handler: async (input, ctx) =>
+    registrarEventosDoFunil(
+      ctx.supabase,
+      {
+        organizationId: ctx.organizationId,
+        leadId: input.lead_id,
+        actor: ctx.actor,
+        eventos: input.events,
+      },
+      ctx.requestId,
     ),
 };
 

@@ -64,6 +64,8 @@ export const ALVO_DE_FUNIL: Record<string, AlvoDeFunil> = {
   // Registro append-only de uma integração: recebe `lead_id`, e o funil sai do lead
   // como em `crm_update_lead`. O agente só registra em pedido de funil que cuida.
   crm_add_lead_events: "funil_vem_do_lead",
+  // Recebe `lead_id`; o funil do cadastro sai do pedido, como em `crm_update_lead`.
+  crm_track_event: "funil_vem_do_lead",
   // Encerrar é a escrita de MAIOR dano do inventário e não aparece na frase
   // "mover card": dá o negócio por ganho ou perdido, tira do radar e das
   // cobranças.

@@ -89,6 +89,9 @@ export const ESCOPO_DAS_ESCRITAS: Readonly<Record<string, Readonly<Record<string
   // Registro append-only de uma integração: só o card da conversa (o `lead_id` é o
   // único identificador). Os eventos entram na linha do tempo e não mexem em campo.
   crm_add_lead_events: { lead_id: "negocio" },
+  // Operação de integração que valida contra o cadastro de eventos do funil. O único identificador
+  // é o `lead_id` do pedido; o funil sai do pedido, nunca da entrada.
+  crm_track_event: { lead_id: "negocio" },
   crm_retomar_lead: { lead_id: "negocio", stage_id: "configuracao" },
   crm_close_demand: { lead_id: "negocio" },
   crm_propose_reactivation: { lead_id: "negocio" },

@@ -68,3 +68,14 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Ao prever contagem de sabotagem, olhar os padrões do helper de teste: um padrão que depende da linha sabotada multiplica os vermelhos.
   - A decisão já cobre o que a US-010 precisa; a operação só precisa montar a EntradaDoMovimento (etapa atual, conjunto M, ator do último stage_changed).
 ---
+
+## 2026-10-29 - US-008
+- lib/leads/eventos-do-funil/registrar.ts: registrarEventosDoFunil (validação contra crm_pipeline_events do funil DO PEDIDO + registro). Um resultado por evento na ordem enviada: registrado / repetido / recusado (evento_nao_cadastrado com a lista das chaves ativas, evento_inativo, evento_grande, hora_fora_da_janela). Problemas do lote (vazio, >50, >64 KB) recusam a chamada inteira (422). event_id obrigatório no schema (eventoDoFunilSchema).
+- lib/leads/eventos-externos.ts: extraí e exportei carregarPedidoParaEvento (filtro de organização, 404, 403 contato pessoal), eventIdsJaGravados e gravarLinhas (agora devolve o resultado de CADA linha); crm_add_lead_events usa os mesmos helpers, comportamento igual.
+- Ferramenta crm_track_event em lib/mcp/tools/leads.ts + index.ts, e os 4 registros de governança no mesmo commit (catalogo/funil.ts, escopo-das-escritas, escopo-de-funil, capacidade-alcancavel): a suíte não aceita ferramenta registrada sem eles, então a US-011 só acrescenta a leitura e a spec.
+- tests/unit/eventos-do-funil-registrar.test.ts (21 casos). Sabotagens: sem o filtro de organização do pedido, 2 vermelhos (um por ferramenta, helper compartilhado); sem o filtro do cadastro, 1 vermelho.
+- Fica para a US-009/010: estado, valor e movimento (os subresultados `estado`, `valor`, `movimento` ainda não existem na resposta).
+- **Learnings for future iterations:**
+  - Ferramenta MCP nova exige: allTools (index.ts), catalogo/funil.ts, escopo-das-escritas.ts, escopo-de-funil.ts e a lista ESCRITA_QUE_E_TRABALHO_DE_ATENDENTE no teste de capacidade; rodar tests/unit/{capacidade-alcancavel-pelo-agente,escopo-de-funil,catalogo-servido,escrita-do-turno-escopo,catalogo-tools-leigo-friendly}.
+  - Cuidado ao escrever hora fixa nos testes: `at` com fuso pode cair no futuro do "agora" do teste e ser recusado pela janela.
+---

@@ -117,6 +117,73 @@ export interface ResultadoDosEventos {
   repetidos: number;
 }
 
+export interface PedidoDoEvento {
+  contatoId: string | null;
+  pipelineId: string | null;
+}
+
+/**
+ * O pedido que vai receber os eventos, ou a recusa. O filtro de organização é MANUAL de propósito: o cliente de
+ * serviço ignora a RLS, e o `lead_id` vem do chamador. Sem este `.eq`, um token da loja A escreveria na linha do
+ * tempo da loja B. Pedido de contato marcado como pessoal está fora da operação (403).
+ */
+export async function carregarPedidoParaEvento(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+  requestId = "",
+): Promise<PedidoDoEvento> {
+  const { data: lead } = await supabase
+    .from("crm_leads")
+    .select("id, contact_id, pipeline_id")
+    .eq("organization_id", organizationId)
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!lead) throw new ApiError(404, "not_found", undefined, requestId, "Pedido não encontrado.");
+  const contatoId = (lead as { contact_id?: string | null }).contact_id ?? null;
+
+  if (contatoId) {
+    const { data: contato } = await supabase
+      .from("contacts")
+      .select("is_personal")
+      .eq("organization_id", organizationId)
+      .eq("id", contatoId)
+      .maybeSingle();
+    if ((contato as { is_personal?: boolean } | null)?.is_personal === true) {
+      throw new ApiError(
+        403,
+        "contato_pessoal",
+        undefined,
+        requestId,
+        "Este pedido é de um contato marcado como pessoal — fora da operação: nada é registrado nele.",
+      );
+    }
+  }
+  return { contatoId, pipelineId: (lead as { pipeline_id?: string | null }).pipeline_id ?? null };
+}
+
+/** Dos `ids` pedidos, os que já estão gravados como evento externo deste pedido. */
+export async function eventIdsJaGravados(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+  ids: readonly string[],
+): Promise<Set<string>> {
+  const jaGravados = new Set<string>();
+  if (ids.length === 0) return jaGravados;
+  const { data: existentes } = await supabase
+    .from("crm_lead_activities")
+    .select("payload")
+    .eq("organization_id", organizationId)
+    .eq("lead_id", leadId)
+    .eq("type", TIPO_DO_EVENTO_EXTERNO)
+    .in("payload->>event_id", [...ids]);
+  for (const linha of (existentes ?? []) as Array<{ payload?: { event_id?: string } }>) {
+    if (linha.payload?.event_id) jaGravados.add(linha.payload.event_id);
+  }
+  return jaGravados;
+}
+
 /**
  * `requestId` vai no ApiError para a auditoria correlacionar; esta camada não o
  * conhece, e o chamador (a ferramenta) é quem sabe — por isso ele entra por fora.
@@ -132,51 +199,11 @@ export async function registrarEventosDoNegocio(
     throw new ApiError(422, "unprocessable_entity", { problemas }, requestId, problemas.join(" "));
   }
 
-  // O filtro de organização é MANUAL de propósito: o cliente de serviço ignora a
-  // RLS, e o `lead_id` vem do chamador. Sem este `.eq`, um token da loja A
-  // escreveria na linha do tempo da loja B.
-  const { data: lead } = await supabase
-    .from("crm_leads")
-    .select("id, contact_id")
-    .eq("organization_id", input.organizationId)
-    .eq("id", input.leadId)
-    .maybeSingle();
-  const contatoId = (lead as { contact_id?: string | null } | null)?.contact_id;
-  if (!lead) throw new ApiError(404, "not_found", undefined, requestId, "Pedido não encontrado.");
-
-  if (contatoId) {
-    const { data: contato } = await supabase
-      .from("contacts")
-      .select("is_personal")
-      .eq("organization_id", input.organizationId)
-      .eq("id", contatoId)
-      .maybeSingle();
-    if ((contato as { is_personal?: boolean } | null)?.is_personal === true) {
-      throw new ApiError(
-        403,
-        "contato_pessoal",
-        undefined,
-        requestId,
-        "Este pedido é de um contato marcado como pessoal — fora da operação: nada é registrado nele.",
-      );
-    }
-  }
+  const { contatoId } = await carregarPedidoParaEvento(supabase, input.organizationId, input.leadId, requestId);
 
   // Repetidos: o que já está gravado para este pedido, e o que se repete no lote.
   const ids = [...new Set(input.eventos.map((e) => e.event_id).filter((v): v is string => !!v))];
-  const jaGravados = new Set<string>();
-  if (ids.length > 0) {
-    const { data: existentes } = await supabase
-      .from("crm_lead_activities")
-      .select("payload")
-      .eq("organization_id", input.organizationId)
-      .eq("lead_id", input.leadId)
-      .eq("type", TIPO_DO_EVENTO_EXTERNO)
-      .in("payload->>event_id", ids);
-    for (const linha of (existentes ?? []) as Array<{ payload?: { event_id?: string } }>) {
-      if (linha.payload?.event_id) jaGravados.add(linha.payload.event_id);
-    }
-  }
+  const jaGravados = await eventIdsJaGravados(supabase, input.organizationId, input.leadId, ids);
 
   const vistosNoLote = new Set<string>();
   const linhas: LeadActivityRow[] = [];
@@ -194,7 +221,7 @@ export async function registrarEventosDoNegocio(
       buildLeadActivityRow({
         organizationId: input.organizationId,
         leadId: input.leadId,
-        contactId: contatoId ?? null,
+        contactId: contatoId,
         type: TIPO_DO_EVENTO_EXTERNO,
         sourceModule: ORIGEM_DO_EVENTO_EXTERNO,
         actor: input.actor,
@@ -212,9 +239,9 @@ export async function registrarEventosDoNegocio(
 
   let registrados = 0;
   if (linhas.length > 0) {
-    const gravadas = await gravarLinhas(supabase, linhas, requestId);
-    registrados = gravadas.registrados;
-    repetidos += gravadas.repetidos;
+    const porLinha = await gravarLinhas(supabase, linhas, requestId);
+    registrados = porLinha.filter((r) => r === "registrado").length;
+    repetidos += porLinha.length - registrados;
   }
 
   return { lead_id: input.leadId, registrados, repetidos };
@@ -224,7 +251,7 @@ export async function registrarEventosDoNegocio(
 const VIOLACAO_DE_UNICIDADE = "23505";
 
 /**
- * Grava as linhas; o `event_id` que o banco recusa por já existir conta como repetido.
+ * Grava as linhas e diz, para CADA uma e na mesma ordem, se entrou ou se o banco a recusou por já existir.
  *
  * O caminho comum é UMA inserção em lote. Se ela falhar com `23505`, outra chamada gravou o
  * mesmo `event_id` entre a leitura prévia e este insert (a corrida que o índice existe para
@@ -232,25 +259,24 @@ const VIOLACAO_DE_UNICIDADE = "23505";
  * linha é inserida sozinha: a que colide vira `repetido`, as outras gravam. Qualquer outro erro
  * continua sendo falha de verdade.
  */
-async function gravarLinhas(
+export async function gravarLinhas(
   supabase: SupabaseClient,
   linhas: LeadActivityRow[],
   requestId: string,
-): Promise<{ registrados: number; repetidos: number }> {
+): Promise<Array<"registrado" | "repetido">> {
   const falha = (mensagem: string) =>
     new ApiError(500, "internal_error", undefined, requestId, `Não consegui registrar os eventos: ${mensagem}`);
 
   const { error } = await supabase.from("crm_lead_activities").insert(linhas);
-  if (!error) return { registrados: linhas.length, repetidos: 0 };
+  if (!error) return linhas.map(() => "registrado" as const);
   if (error.code !== VIOLACAO_DE_UNICIDADE) throw falha(error.message);
 
-  let registrados = 0;
-  let repetidos = 0;
+  const resultados: Array<"registrado" | "repetido"> = [];
   for (const linha of linhas) {
     const { error: erroDaLinha } = await supabase.from("crm_lead_activities").insert(linha);
-    if (!erroDaLinha) registrados += 1;
-    else if (erroDaLinha.code === VIOLACAO_DE_UNICIDADE) repetidos += 1;
+    if (!erroDaLinha) resultados.push("registrado");
+    else if (erroDaLinha.code === VIOLACAO_DE_UNICIDADE) resultados.push("repetido");
     else throw falha(erroDaLinha.message);
   }
-  return { registrados, repetidos };
+  return resultados;
 }
