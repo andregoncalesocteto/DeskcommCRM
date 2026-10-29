@@ -167,3 +167,13 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - O conferidor de chaves faltando sai do próprio teste (`i18n-espanhol-cobre-a-tela`): rodar, copiar a lista, traduzir.
   - Para logar no navegador sem a senha do dono: criar usuário temporário pela API de admin do Auth (`POST /auth/v1/admin/users` com a service key) + linha em user_organizations (role manager) e apagar no fim.
 ---
+
+## 2026-10-29 - US-018
+- tests/e2e/eventos-do-funil.spec.ts (parte 7 do CI): login do gerente, cadastro do evento de compra pela tela (etapa, guardar em, valor, repetição, "respeitar a mão" desligado), a compra enviada por `crm_track_event` com o token MCP do seed (metade direta do par), conferência no banco (etapa Compras, value_cents 7390) e a tela relida mostrando "Visto pela última vez" com a chave trancada; segundo caso desativa e ativa. Funil/etapas/pedido semeados e apagados pela própria spec. J58 no mapa de jornadas.
+- Rodada local real: `pnpm e2e:env` + `pnpm e2e:build` + playwright: 2 passam (10,5 s). Capturas e2e-01…05 em evidence/eventos-do-funil/.
+- Sabotagem (chave sempre editável, exigiu rebuild): reprovou em `toBeDisabled`; previ 1 caso vermelho, deram 2 — o segundo depende do cadastro do primeiro (cascata). Código restaurado.
+- **Learnings for future iterations:**
+  - Rodar e2e aqui: `pnpm e2e:env`, `pnpm e2e:build` (~5 min), `pnpm exec playwright install chromium` (uma vez). O seed cria org `e2e` + 5 usuários + tokens no banco LOCAL (o mesmo da operação): ao fim, `delete from organizations where id=<org_id de .e2e-creds.json>` e `delete from auth.users where email like 'e2e-%@deskcomm.test'`, e apagar `.e2e-creds.json`/`.e2e-agente-mcp.json`. Conferir contagem antes/depois (era 1|1).
+  - `crm_stages` exige `is_won` e `is_lost` explícitos; `crm_pipeline_events` guarda o destino em `stage_id`.
+  - Sabotar código de tela exige rebuild do e2e: planejar uma sabotagem só.
+---

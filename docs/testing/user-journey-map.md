@@ -3928,6 +3928,32 @@ código e a hora anteriores e se houve confirmação).
 WhatsApp; o caminho termina em «Não enviada — sem conexão»); o toque num iPhone e num
 Android reais; o reenvio de mídia pela tela (coberto só pela regra e pela rota).
 
+## J58 — Cadastrar o evento de compra do funil e vê-lo chegar `[P1]` (2026-10-29)
+
+Contexto: épico "Eventos do funil", etapa 1 (`docs/design/eventos-do-funil.md`). Um sistema de fora
+(o cardápio digital da franquia) conta ao CRM o que o cliente fez; cada funil cadastra, à mão, os
+eventos que aceita e para onde o card vai quando cada um chega. Evento não cadastrado é recusado.
+
+Spec: `tests/e2e/eventos-do-funil.spec.ts` (parte 7), login `manager`, funil e pedido semeados pela
+própria spec e apagados no fim. Evidência: `evidence/eventos-do-funil/e2e-*.png` e
+`verificacao-no-navegador-us016-us017.md`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J58.1 `[P1]` | Funil sem evento | estado vazio explica que nenhum sistema de fora move cards ali | PASS (e2e local, 29/10/2026) |
+| J58.2 `[P1]` | Cadastrar «Compra concluída» pela tela | etapa Compras, guardar em `pedido`, valor em `value`, repetição por `order_id`, «respeitar a mão» desligado; o banco guarda o mesmo | PASS (e2e local) |
+| J58.3 `[P1]` | A compra chega pela ferramenta `crm_track_event` | resultado `registrado`; o pedido vai a Compras com `value_cents` 7390 (a metade direta do par) | PASS (e2e local) |
+| J58.4 `[P1]` | A tela mostra o mesmo fato | «Visto pela última vez em…» e a chave do evento fica trancada | PASS (e2e local) |
+| J58.5 | Desativar e ativar | selo «Desativado» aparece e some, e o banco acompanha | PASS (e2e local) |
+| J58.6 | Avisos (valor ausente, mesmo «guardar em», etapa arquivada) e bloqueio de campo da ficha | texto leigo, sem bloquear exceto o campo da ficha | PASS no navegador (29/10/2026, ver a nota de verificação) + UNIT `_eventos.test.tsx` |
+
+**Sabotagem da spec:** com a chave sempre editável, o caso 1 reprova em `toBeDisabled` (e o 2 cai junto,
+porque depende do cadastro do primeiro).
+
+**NÃO COBERTO, declarado:** celular e leitor de tela; o caminho por um agente de IA (a etapa 1 não tem
+agente no meio); a porta pública e o plugin (etapa 2); o `proxy.ts` global só foi exercitado pelo cookie
+do gerente, não por bearer em rota REST.
+
 ## Conferência integrada de correções — 26/10/2026
 
 [Registro do lote #3462](lote-3462-2026-10-26.md): oito contribuições provadas numa
