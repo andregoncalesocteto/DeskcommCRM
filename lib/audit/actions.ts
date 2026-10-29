@@ -475,6 +475,8 @@ export const AUDIT_ACTIONS = [
   "pipeline_event.created",
   "pipeline_event.updated",
   "pipeline_event.deactivated",
+  "tracker_key.created",
+  "tracker_key.revoked",
   "pipeline.stage_created",
   "pipeline.stage_updated",
   "pipeline.stage_archived",

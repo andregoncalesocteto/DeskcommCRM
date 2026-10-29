@@ -196,3 +196,15 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Próximo NNNN livre medido: 9042 (`pnpm checar:colisao-de-migration`; sem `gh` ele não mede PRs abertos — declarar).
   - Tabela cujo LEITOR é só o gerente: use uma política `for all` com fn_role_at_least na USING (sem política de select separada).
 ---
+
+## 2026-10-29 - US-021
+- lib/tracker/origens.ts (puro, compartilhado com a porta pública da US-022): `normalizarOrigem` (https; http só em localhost/127.0.0.1; sem caminho/consulta/fragmento/credenciais; host só [a-z0-9.-]), `normalizarOrigens` (dedup depois de normalizar), `novaChaveSchema` (strict: organization_id/pipeline_id/public_key no corpo = 422).
+- Rotas: `app/api/v1/pipelines/[id]/tracker-keys/route.ts` (GET lista; POST cria, manager+, `requireSupportWrite(` antes do efeito, auditoria `tracker_key.created`) e `[key_id]/route.ts` (DELETE = revoga: is_active=false + revoked_at, mantém a linha; revogar de novo = 200 sem auditar; `tracker_key.revoked`). A chave é pública: devolvida inteira em toda leitura; o valor é gerado pelo banco (a rota não o envia).
+- Testes: origens 28, rota coleção 14, rota item 5 (todos verdes); `suporte-cobertura-de-efeitos` e i18n verdes. Sabotagem (tirar o `.eq("organization_id")` da leitura do DELETE): 1 vermelho, como previsto.
+- ACHADO REAL pelo teste: `new URL("https://*.exemplo.com")` é aceito pelo parser do Node; sem a checagem de host o curinga entrava no cadastro. Corrigido com regex de host.
+- Corrigi também dívida minha da US-018: `tests/unit/evidencia-citada` reprovava as capturas e2e-*.png sem documento que as citasse -> `evidence/eventos-do-funil/prova-e2e-etapa-1.md`.
+- `pnpm cercas`: 15 falhas = as 14 conhecidas (e2e-apt-troca-espelho 12, e2e-preparo-tenta-de-novo 2) + a evidencia-citada, já consertada.
+- **Learnings for future iterations:**
+  - Toda imagem versionada em evidence/ precisa ser CITADA PELO NOME em um .md (rodar `tests/unit/evidencia-citada.test.ts` ao adicionar capturas).
+  - `pnpm cercas` leva ~5 min; as 14 falhas de e2e-apt/e2e-preparo são pré-existentes (ffmpeg/apt).
+---

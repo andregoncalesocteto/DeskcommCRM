@@ -18409,6 +18409,8 @@ export const DICIONARIO: Traducoes = {
   "Ainda não recebeu nada.": { es: "Aún no ha recibido nada." },
   "nos últimos 7 dias": { es: "en los últimos 7 días" },
   "Visto pela última vez em": { es: "Visto por última vez el" },
+  "Chave não encontrada.": { es: "Clave no encontrada." },
+  "Origem não aceita: use https://seu-site.com.br, sem caminho (http só em localhost).": { es: "Origen no aceptado: usa https://tu-sitio.com, sin ruta (http solo en localhost)." },
 };
 
 /**
