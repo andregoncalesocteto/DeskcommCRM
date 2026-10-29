@@ -1,0 +1,643 @@
+{
+  "project": "DeskcommCRM",
+  "branchName": "ralph/eventos-do-funil",
+  "description": "Eventos do funil - cada funil cadastra os seus eventos; uma operação única registra, atualiza estado e valor e move o card sem retroceder (etapa 1: núcleo; etapa 2: porta pública e script do navegador; etapa 3: webhook de entrada com valor e JSON do pedido)",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Responder os pontos em aberto antes de construir",
+      "description": "Como desenvolvedor, preciso confirmar quatro fatos sobre o código existente antes de escrever a migration, para o desenho não nascer sobre suposição.",
+      "acceptanceCriteria": [
+        "Documento docs/design/eventos-do-funil-fase-0.md com uma seção por pergunta, cada uma com a evidência (comando, consulta ou teste) e a conclusão",
+        "Pergunta 1: o actor_kind gravado em crm_lead_activities quando um token MCP chama crm_move_lead_stage, e quando o moveLeadHandler roda com ator de sistema; a resposta diz se algum caminho grava 'user'",
+        "Pergunta 2: existe gatilho, política ou rotina de retenção que impeça delete em crm_lead_activities? Lista os achados com o nome do objeto",
+        "Pergunta 3: alguma regra do moveLeadHandler exige ator humano (motivo de ganho, campo obrigatório, reabertura)?",
+        "Pergunta 4: as políticas support_write_* de crm_stages precisam de espelho em crm_pipeline_events?",
+        "Nenhum código de produção alterado; testes de investigação, se existirem, ficam em tests/unit/ e passam",
+        "Se alguma resposta contradiz docs/design/eventos-do-funil.md, o Design Doc é corrigido na mesma entrega",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Criar a tabela de cadastro de eventos do funil",
+      "description": "Como mantenedor, quero a tabela crm_pipeline_events com RLS, para o funil guardar os seus eventos.",
+      "acceptanceCriteria": [
+        "Migration em supabase/migrations/ com a linha '-- manifest:' e número obtido por pnpm checar:colisao-de-migration",
+        "Colunas e constraints como na seção 'Modelo de dados' de docs/superpowers/specs/2026-10-29-eventos-do-funil-design.md: key com a regex ^[a-z][a-z0-9_]{0,63}$, unique (pipeline_id, key), value_unit com check (reais|centavos), value_path e value_unit juntos ou nenhum, FK de stage_id com on delete set null",
+        "RLS tenant_isolation_crm_pipeline_events_all via fn_user_org_ids(); escrita de manager para cima; decisão da US-001 sobre support_write_* aplicada",
+        "Apêndice idempotente correspondente em supabase/baseline.sql",
+        "lib/database.types.ts regenerado",
+        "pnpm test:db passa em modo instalação e em modo atualização",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Provar o isolamento do cadastro entre organizações",
+      "description": "Como mantenedor, quero um teste que cria duas organizações e prova que uma não lê nem escreve nos eventos da outra.",
+      "acceptanceCriteria": [
+        "Novo arquivo em tests/invariants/ (sem editar invariantes existentes) com duas organizações e um evento em cada",
+        "Leitura cruzada devolve zero linhas; escrita cruzada é recusada",
+        "Sabotagem registrada no PR: remover a política de isolamento deixa o teste vermelho, com o número de casos previsto",
+        "pnpm test:db tests/invariants/<arquivo novo> passa",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Índice único de event_id em crm_lead_activities",
+      "description": "Como mantenedor, quero um índice único por pedido e event_id, para duas chamadas simultâneas não duplicarem o histórico.",
+      "acceptanceCriteria": [
+        "Migration cria uniq_lead_activities_external_event_id: parcial (type = 'external_event' e payload ? 'event_id'), sobre organization_id, lead_id e payload->>'event_id'",
+        "A migration deduplica as linhas existentes (mantém a mais antiga) antes de criar o índice, é idempotente e respeita o achado da US-001 sobre delete",
+        "Apêndice correspondente em supabase/baseline.sql",
+        "Teste de banco: a segunda inserção do mesmo event_id no mesmo pedido falha com 23505; o mesmo event_id em pedidos diferentes é aceito",
+        "Teste de banco da migration com duplicatas pré-existentes, em instalação e em atualização",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Tratar 23505 como repetido em registrarEventosDoNegocio",
+      "description": "Como integrador, quero que um envio simultâneo do mesmo event_id devolva repetido em vez de erro.",
+      "acceptanceCriteria": [
+        "registrarEventosDoNegocio em lib/leads/eventos-externos.ts trata o erro 23505 do índice como 'repetido' e segue com os demais eventos do lote",
+        "O comportamento de crm_add_lead_events não muda para quem reenvia em sequência (continua devolvendo registrados e repetidos)",
+        "Teste cobre inserção concorrente do mesmo event_id: um registrado, um repetido, sem erro",
+        "Sabotagem registrada: remover o tratamento de 23505 deixa o teste vermelho",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Funções puras de caminho no JSON e valor em centavos",
+      "description": "Como desenvolvedor, quero funções puras que leiam um campo do JSON do evento e o convertam em centavos, para a operação não duplicar essa lógica.",
+      "acceptanceCriteria": [
+        "Módulo novo em lib/leads/, sem I/O: resolverCaminho(data, caminho) aceita só nomes de campo com ponto (value, pedido.total), devolve undefined quando não acha e nunca interpreta expressão nem índice de array",
+        "valorEmCentavos(valor, unidade): 'reais' arredonda valor*100; 'centavos' exige inteiro; recusa não numérico, não finito e negativo; NÃO há teto máximo (decisão do dono)",
+        "Testes por tabela: caminho simples, aninhado, ausente, tipo errado, array; valor em reais com arredondamento, em centavos, string numérica, negativo, NaN, Infinity",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Funções puras de decisão de movimento e ordem do estado",
+      "description": "Como desenvolvedor, quero as regras de não retrocede, respeita movimento manual e o mais novo vence como funções puras testáveis.",
+      "acceptanceCriteria": [
+        "decidirMovimento(...) recebe etapa atual, conjunto de etapas de destino do funil, posições, destino, se o pedido está encerrado, se a etapa está arquivada, o flag do evento e o ator do último movimento; devolve um de: movido, sem_destino, ja_na_etapa_ou_adiante, respeita_movimento_manual, pedido_encerrado, etapa_arquivada",
+        "Etapa atual fora do conjunto de destinos (Conversas, Chamar humano) não trava o avanço; etapa atual dentro do conjunto só avança para posição maior",
+        "estadoDevePrevalecer(at, ultimoAt) devolve verdadeiro quando at é igual ou mais novo",
+        "Testes por tabela cobrem: dentro e fora do conjunto, à frente, atrás e igual, encerrado, arquivada, flag ligado e desligado, ator 'user' e 'system'",
+        "Sabotagem registrada: trocar 'maior' por 'maior ou igual' e ignorar o ator deixam testes vermelhos, com o número previsto",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "crm_track_event: validação e registro dos eventos",
+      "description": "Como integrador, quero enviar um lote de eventos de um pedido e receber um resultado por evento, para saber o que foi aceito, repetido ou recusado.",
+      "acceptanceCriteria": [
+        "Ferramenta crm_track_event registrada em lib/mcp/tools/ (escopo mcp:write, papel agent): entrada lead_id e events (1 a 50); event e event_id obrigatórios; at e data opcionais",
+        "Limites: 8 KB por evento, 64 KB por chamada, at entre 30 dias atrás e 5 minutos à frente; uma escrita no teto do token por chamada",
+        "O funil sai do pedido (crm_leads.pipeline_id), nunca da entrada; a busca do pedido filtra organization_id",
+        "Pedido de contato is_personal é recusado (403), como em crm_add_lead_events",
+        "Resposta com um resultado por evento, na ordem enviada: 'registrado', 'repetido' (mesmo event_id) ou 'recusado' com codigo e mensagem",
+        "Códigos de recusa: evento_nao_cadastrado (a mensagem lista as chaves ativas do funil), evento_inativo, evento_grande, hora_fora_da_janela",
+        "Recusar um evento não derruba os outros do lote",
+        "O registro grava a atividade external_event com performed_at igual ao at",
+        "Testes: lote misto (válido, desconhecido, repetido, inativo) devolve os resultados corretos na ordem; pedido de outra organização devolve 'Pedido não encontrado.'",
+        "Sabotagem registrada: remover o filtro de organization_id deixa o teste de isolamento vermelho",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "crm_track_event: repetição de negócio, estado e valor",
+      "description": "Como integrador, quero que o último carrinho vença, que a mesma compra não conte duas vezes e que o valor da venda seja gravado.",
+      "acceptanceCriteria": [
+        "Com dedupe_path cadastrado, um evento cujo valor nesse caminho já foi registrado no mesmo pedido devolve 'repetido' e não faz mais nada",
+        "Com state_key, o conteúdo de data é gravado em custom_fields[state_key] só se at for igual ou mais novo que o do último evento da mesma chave no pedido, lido do histórico; evento atrasado devolve estado 'ignorado_antigo'",
+        "Com value_path e value_unit, o valor vira value_cents (usa valorEmCentavos); valor inválido devolve 'recusado' com codigo valor_invalido e nada é gravado para esse evento",
+        "Estado e valor vão na mesma atualização do pedido, ANTES do movimento",
+        "Pedido encerrado não muda de estado nem de valor; os resultados trazem 'ignorado_pedido_encerrado'",
+        "Estado e valor são aplicados mesmo quando o registro do histórico foi 'repetido' por queda anterior no meio do processamento (cada passo se protege sozinho)",
+        "Testes: mesmo order_id com event_id diferente, carrinho atrasado, valor em reais e em centavos, pedido encerrado",
+        "Sabotagem registrada: aplicar o valor depois do movimento deixa vermelho o teste de ordem",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "crm_track_event: movimento da etapa",
+      "description": "Como integrador, quero que o card avance para a etapa cadastrada sem retroceder e sem desfazer decisão da equipe.",
+      "acceptanceCriteria": [
+        "O movimento usa decidirMovimento e, quando 'movido', passa pelo moveLeadHandler com ator 'system'; mover para o mesmo lugar não gera stage_changed",
+        "A atualização de etapa é condicional à etapa lida; dois eventos simultâneos geram um só stage_changed",
+        "Último stage_changed com actor_kind 'user' e flag respects_manual_move ligado: o evento é registrado, estado e valor são gravados e o resultado é 'respeita_movimento_manual'",
+        "Depois de um movimento feito pelo evento (ator 'system'), os eventos seguintes voltam a mover normalmente",
+        "Recusa do funil (motivo, campo obrigatório) devolve 'recusado_pelo_funil' com a mensagem, e estado e valor já gravados permanecem",
+        "Etapa de destino arquivada devolve 'etapa_arquivada' e o evento só registra",
+        "Testes: sequência page_view, view_item, cart, checkout, purchase termina em Compras; evento de nível menor depois não retrocede; desvio por 'Chamar humano' não trava a compra; movimento manual no meio é respeitado",
+        "Sabotagem registrada: ignorar o actor_kind deixa vermelho o teste de movimento manual",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Leitura das chaves e gates do catálogo MCP",
+      "description": "Como integrador, quero listar os eventos cadastrados de um funil; como mantenedor, quero que as duas ferramentas novas passem nos gates do catálogo.",
+      "acceptanceCriteria": [
+        "crm_list_pipeline_events (leitura, mcp:read) recebe pipeline_id e devolve chave, nome, se está ativo, nome da etapa de destino, se guarda estado e se define valor; nunca devolve ids de etapa",
+        "Entradas nos gates: lib/mcp/tools/catalogo/funil.ts (rótulo sem jargão e risco), lib/ai/runtime/escopo-das-escritas.ts (crm_track_event: { lead_id: 'negocio' }), lib/leads/escopo-de-funil.ts ('funil_vem_do_lead') e a lista de trabalho de atendente em tests/unit/capacidade-alcancavel-pelo-agente.test.ts",
+        "Seção nova em docs/specs/11-spec-mcp-server-internal.md com as duas ferramentas e os dois contratos (crm_add_lead_events permissiva, crm_track_event estrita)",
+        "crm_add_lead_events não muda de comportamento",
+        "Os gates catalogo-servido, escrita-do-turno-escopo, escopo-de-funil, capacidade-alcancavel-pelo-agente e catalogo-tools-leigo-friendly passam",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Provar a operação pelo MCP direto, na stack local",
+      "description": "Como mantenedor, quero a prova de ponta a ponta da operação com um token real, para não depender só de testes unitários.",
+      "acceptanceCriteria": [
+        "Roteiro executado na stack local com token temporário, apagado ao final e conferido por consulta: cadastro dos eventos de um funil, sequência completa de um pedido, reenvio idêntico, evento atrasado, evento desconhecido, movimento manual no meio",
+        "Tabela com cada passo, o resultado devolvido e o estado do pedido no banco, anexada ao PR",
+        "Dados de teste apagados e a contagem de sobras zerada",
+        "pnpm test:db e a suíte inteira (pnpm test:unit) conferidos pelo rodapé, com o rodapé e o grep FAIL batendo",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "API de cadastro: listar eventos do funil",
+      "description": "Como gerente, quero listar os eventos de um funil com sinais de uso, para a tela mostrar se cada um está chegando.",
+      "acceptanceCriteria": [
+        "GET /api/v1/pipelines/[id]/events lista os eventos do funil com último recebimento e contagem dos últimos 7 dias, lidos do histórico; papel manager ou mais",
+        "organization_id vem do JWT, nunca do corpo; a consulta filtra organization_id explicitamente",
+        "Testes de rota: lista com e sem atividade, papel insuficiente, funil de outra organização devolve 404",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "API de cadastro: criar evento",
+      "description": "Como gerente, quero criar um evento de um funil por uma API protegida, com as validações do cadastro.",
+      "acceptanceCriteria": [
+        "POST /api/v1/pipelines/[id]/events cria o evento, aceita Idempotency-Key, valida com Zod, declara requireSupportWrite( antes do efeito e grava pipeline_event.created em api_audit_log",
+        "Validações: stage_id do mesmo funil, não arquivada e NÃO de perda; key com a regex e única no funil; value_path e value_unit juntos; state_key não pode ser igual à chave de um campo declarado do funil (422)",
+        "state_key já usada por outro evento do mesmo funil salva e devolve um aviso na resposta (não bloqueia)",
+        "O gate suporte-cobertura-de-efeitos passa",
+        "Testes de rota: criação válida, chave duplicada, etapa de perda, etapa de outro funil, campo declarado, aviso de state_key repetida, papel insuficiente",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "API de cadastro: editar e desativar evento",
+      "description": "Como gerente, quero editar e desativar um evento sem perder o histórico.",
+      "acceptanceCriteria": [
+        "PATCH /api/v1/pipelines/[id]/events/[event_id] edita os campos permitidos; a key é imutável quando já existe atividade com ela (409 com mensagem clara)",
+        "DELETE desativa (is_active = false), não apaga; auditoria pipeline_event.deactivated; pipeline_event.updated nas edições",
+        "Evento desativado passa a ser recusado com 'evento_inativo' na crm_track_event",
+        "requireSupportWrite( declarado nos dois handlers e requireRole de manager",
+        "Testes: mudar a key com atividade, desativar e reenviar evento, editar a etapa de destino",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Tela: cadastrar e editar eventos do funil",
+      "description": "Como gerente, quero uma seção em Etapas do Funil onde cadastro os eventos e escolho para onde o card vai em cada um.",
+      "acceptanceCriteria": [
+        "Seção 'Para onde o card vai em cada evento', abaixo de 'Para onde o card vai em cada passo', em app/app/settings/tenant/pipelines/",
+        "Cada linha mostra nome, chave e etapa de destino (ou 'Não mover'); criar, editar e desativar usam as APIs de cadastro",
+        "Painel recolhível por evento com: guardar em, campo do valor e unidade, chave de repetição, respeitar movimento manual",
+        "A lista de etapas de destino não oferece etapas de perda nem arquivadas",
+        "Textos em linguagem de quem usa, sem jargão (nada de state_key ou jsonb na tela)",
+        "Não cria entrada nova em lib/navigation/catalogo.ts (é seção de uma tela já alcançável)",
+        "Lint passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Tela: avisos e sinais de uso dos eventos",
+      "description": "Como gerente, quero ser avisado de configurações perigosas e ver se cada evento está chegando.",
+      "acceptanceCriteria": [
+        "Aviso (não bloqueia) quando o destino é de ganho e não há campo do valor: 'esta etapa fecha a venda, mas o evento não define o valor, então a venda não será enviada como conversão'",
+        "Aviso quando a etapa de destino foi arquivada (o evento passa a só registrar)",
+        "Aviso quando dois eventos usam o mesmo 'guardar em'",
+        "Erro de bloqueio quando 'guardar em' é igual à chave de um campo declarado do funil",
+        "Cada evento mostra 'visto pela última vez' e a contagem dos últimos 7 dias; sem nenhum recebimento mostra 'ainda não recebeu nada'",
+        "Lint passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Prova pela tela da etapa 1",
+      "description": "Como mantenedor, quero a prova de que um leigo cadastra eventos e vê o card mudar, num ambiente estilo instalação nova.",
+      "acceptanceCriteria": [
+        "Spec Playwright em tests/e2e/ registrada em uma SPECS_PARTE_N de .github/workflows/e2e.yml (ou em FORA_DO_CI com o motivo); o gate e2e-cobertura-completa passa",
+        "Banco do baseline.sql mais bootstrap-owner, com os envs opcionais ausentes",
+        "Fluxo: criar funil, cadastrar eventos à mão, ver os avisos, chamar a operação por fora e ver a timeline e o card mudarem",
+        "Evidência (capturas e traço) em evidence/eventos-do-funil/, pasta versionada",
+        "Linha nova em docs/testing/user-journey-map.md",
+        "Lint passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Documentação e release da etapa 1",
+      "description": "Como operador, quero a nota de versão e o guia da Bella Capri atualizados.",
+      "acceptanceCriteria": [
+        "Fragmento em .changes/ com impacto capacidade_nova; pnpm release:conferir passa; nenhuma seção escrita à mão no CHANGELOG.md",
+        "integracao-mcp-cardapio.md descreve a operação nova, a lista de eventos e quando usar crm_add_lead_events e quando crm_track_event",
+        "Nota no guia: a recusa é definitiva, não deve ser reenviada",
+        "Os cinco eventos da Bella Capri documentados como cadastro manual (sem modelo): chave, destino, guardar em, valor e flag de cada um",
+        "Documentos de autoridade que afirmam estado sobre o comportamento mudado foram conferidos (DoD 16)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Tabela de chaves públicas do rastreador",
+      "description": "Como mantenedor, quero uma tabela de chaves públicas por funil com as origens permitidas, para um script no navegador enviar eventos sem token secreto.",
+      "acceptanceCriteria": [
+        "Migration em tripla (arquivo, apêndice idempotente em supabase/baseline.sql e '-- manifest:') de uma tabela com organização, funil, identificador público, origens permitidas, ativa e revogada, com RLS",
+        "A chave é um identificador público, NÃO um segredo: revogar a desativa na hora",
+        "Teste de isolamento entre duas organizações",
+        "Teste de que a chave resolve a organização e o funil, e de que nenhum dos dois é aceito pelo corpo",
+        "pnpm test:db passa em modo instalação e em modo atualização",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "API de gerenciamento das chaves públicas",
+      "description": "Como gerente, quero criar, listar e revogar chaves públicas do rastreador.",
+      "acceptanceCriteria": [
+        "Rotas de criar, listar e revogar com requireRole de manager, requireSupportWrite( antes do efeito, Zod e auditoria em api_audit_log",
+        "Origens permitidas validadas como origens https (e http apenas para localhost)",
+        "organization_id vem do JWT, nunca do corpo",
+        "Testes de rota: criar, listar, revogar, papel insuficiente, origem inválida",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Porta pública de coleta: rota, chave e CORS",
+      "description": "Como script no navegador, quero enviar um lote de eventos com a chave pública, para o CRM processá-los.",
+      "acceptanceCriteria": [
+        "Rota pública em app/api/v1/ com entrada em lib/auth/public-paths.ts (público = o proxy não decide; a chave decide)",
+        "Organização e funil vêm SOMENTE da chave; chave revogada ou desconhecida é recusada",
+        "CORS só para as origens permitidas da chave; origem não listada não recebe os cabeçalhos; responde ao preflight OPTIONS",
+        "Lote de até 20 eventos; Zod em toda entrada; usa a operação crm_track_event por baixo",
+        "Testes: origem não permitida, chave revogada, lote acima de 20, corpo inválido",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Porta pública de coleta: limite de taxa e resposta sem vazamento",
+      "description": "Como mantenedor, quero limite de taxa e uma resposta que não revele dado do contato nem a existência do pedido.",
+      "acceptanceCriteria": [
+        "Limite de taxa por chave e por IP, com Retry-After no 429",
+        "A resposta tem a mesma forma para qualquer idtrack (inexistente, sem pedido aberto ou válido) e nunca traz dado pessoal",
+        "O resultado por evento é devolvido sem dados pessoais",
+        "Testes: estouro do limite, idtrack inexistente igual a idtrack válido sem efeito na forma da resposta",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Identificar o pedido pelo idtrack",
+      "description": "Como cardápio de terceiro, quero que o CRM ache o pedido aberto do cliente pelo idtrack da URL, para eu não precisar listar leads.",
+      "acceptanceCriteria": [
+        "O idtrack é o id do contato e precisa ser um UUID; qualquer outro valor é descartado sem efeito e sem erro revelador",
+        "O servidor acha o pedido aberto mais recente do contato NO FUNIL DA CHAVE; sem pedido aberto, o evento é descartado sem criar nada",
+        "Contato marcado como pessoal é descartado",
+        "Sem idtrack, nenhuma identidade é gravada",
+        "Testes: UUID válido sem pedido, telefone no lugar do id, contato pessoal, vários pedidos abertos (vale o mais recente), pedido de outro funil",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Regras de confiança para evento vindo do navegador",
+      "description": "Como mantenedor, quero travas que limitem o estrago de uma compra forjada, já que a compra pode sair do navegador.",
+      "acceptanceCriteria": [
+        "Todo evento da porta pública é gravado com origem 'navegador' no histórico",
+        "Evento cujo destino é etapa de ganho, vindo do navegador, só fecha o pedido se o pedido já registrou ao menos um evento de estado antes (carrinho ou revisão); caso contrário é registrado e não move, e o resultado explica o motivo",
+        "Uma compra por pedido: o mesmo order_id com outro event_id é repetição",
+        "Pedido já encerrado só registra o evento",
+        "Nenhum evento do navegador move para etapa de perda; a documentação diz que cancelar é pelo servidor, com token",
+        "Testes: compra do navegador sem carrinho antes, compra duplicada, compra em pedido encerrado",
+        "Sabotagem registrada: remover a trava de sequência deixa o teste vermelho",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Script do rastreador: inicialização, fila e envio em lote",
+      "description": "Como dono de um cardápio de terceiro, quero colar um script e chamar funções simples, para enviar os eventos ao CRM.",
+      "acceptanceCriteria": [
+        "Arquivo estático versionado em public/, sem dependências; implementação própria, sem trecho copiado de SDK de terceiros",
+        "API manual: inicialização com a chave e track(evento, dados); SEM observação automática por atributos HTML e SEM leitura do dataLayer",
+        "Cada evento recebe um event_id (UUID) na criação e o mantém até a confirmação; fila em lote de até 20 eventos a cada 3 segundos; envio ao sair da página; reenvio com o mesmo event_id",
+        "NÃO reenvia evento 'recusado' (a recusa é definitiva); reenvia só falha de rede e 5xx",
+        "Falha do script nunca quebra a página do cardápio (tudo dentro de try/catch)",
+        "Testes do arquivo com ambiente de navegador simulado: fila, lote, reenvio, recusa",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Script do rastreador: idtrack, privacidade e depuração",
+      "description": "Como dono de um cardápio de terceiro, quero que o script respeite a privacidade do cliente e me ajude a depurar.",
+      "acceptanceCriteria": [
+        "Lê o idtrack da URL, valida que é um UUID e o guarda na sessão do navegador; sem idtrack válido, não envia nada",
+        "Opção de não guardar nada no navegador e função de optar por sair, que apaga o que foi guardado",
+        "Modo de depuração que avisa no console quando a chave do evento não existe, usando a lista de chaves da resposta",
+        "O script nunca envia telefone, e-mail nem nome",
+        "Testes do arquivo: idtrack inválido, sem armazenamento, optar por sair, aviso de depuração",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Tela de instalação do rastreador",
+      "description": "Como gerente, quero criar a chave, informar as origens do cardápio e copiar o trecho de instalação.",
+      "acceptanceCriteria": [
+        "Seção na tela de funis para criar e revogar a chave, listar origens permitidas e copiar o trecho pronto com a chave",
+        "Texto explica em linguagem simples o que é a chave pública e que o cancelamento não passa por ela",
+        "Mostra se a chave já recebeu algum evento",
+        "Se for tela nova, declarada em lib/navigation/catalogo.ts; se for seção de tela existente, sem entrada nova",
+        "Lint passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Prova de ponta a ponta da etapa 2",
+      "description": "Como mantenedor, quero provar que uma página de teste com o script move o card de um pedido de verdade.",
+      "acceptanceCriteria": [
+        "Página de teste servida localmente, em origem diferente da do CRM, carregando o script",
+        "Fluxo Playwright: abrir com idtrack, ver item, montar carrinho, revisar, comprar; o card chega a Compras com valor e JSON",
+        "Casos negativos provados com receiver real: origem não permitida, chave revogada, idtrack com telefone, compra sem carrinho, recarga da página de sucesso sem duplicar",
+        "Spec em SPECS_PARTE_N ou FORA_DO_CI com motivo; evidência em evidence/eventos-do-funil/",
+        "Lint passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Documentação e release da etapa 2",
+      "description": "Como operador, quero a nota de versão e o guia de instalação do rastreador.",
+      "acceptanceCriteria": [
+        "Fragmento em .changes/ (capacidade_nova) e pnpm release:conferir passando",
+        "Guia de instalação para o dono do cardápio: trecho, chamadas por evento, o que o script não faz, aviso de consentimento e de privacidade (o que é guardado no navegador)",
+        "Documento de LGPD do produto conferido: o script não envia telefone, e-mail nem nome",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Webhook de entrada: valor da venda em value_cents",
+      "description": "Como dono de uma plataforma de cardápio que avisa pedido finalizado, quero que o valor do pedido preencha value_cents do card.",
+      "acceptanceCriteria": [
+        "A fonte do webhook aceita configurar o campo do valor e a unidade (reais ou centavos), reaproveitando valorEmCentavos",
+        "O valor é gravado em value_cents na criação do card e na atualização de um card reaproveitado, antes de mover a etapa",
+        "Valor inválido não derruba o envio: o card é criado sem valor e o motivo fica no log do webhook",
+        "Testes de rota: reais, centavos, ausente, inválido",
+        "Os testes existentes de webhooks/in continuam passando",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-032",
+      "title": "Webhook de entrada: guardar o JSON do pedido",
+      "description": "Como gerente, quero que os itens do pedido (lista e objetos) não sejam descartados, para consultar o que foi comprado.",
+      "acceptanceCriteria": [
+        "A fonte aceita configurar uma chave de custom_fields onde o conteúdo aninhado do envio é guardado como JSON",
+        "Sem a configuração, o comportamento atual (descartar o aninhado) não muda",
+        "Limite de tamanho do JSON guardado, com recusa explícita no log quando excede",
+        "A chave configurada não pode coincidir com um campo declarado do funil",
+        "Testes de rota: objeto, lista, tamanho acima do limite, chave coincidente",
+        "Tests pass",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-033",
+      "title": "Tela da fonte do webhook: valor e JSON",
+      "description": "Como gerente, quero configurar na tela da fonte o campo do valor e onde guardar o JSON do pedido.",
+      "acceptanceCriteria": [
+        "Na tela de integração de dados, a fonte mostra os dois campos novos, com explicação em linguagem simples",
+        "Aviso quando a etapa padrão da fonte é de ganho e nenhum campo do valor foi configurado",
+        "Aviso explicando que a etapa padrão da fonte vale para todo envio daquela fonte",
+        "Lint passes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Relatórios separados por origem do pedido",
+      "description": "Como analista, quero que o pedido que nasceu fora do WhatsApp não infle a conversão da conversa à compra.",
+      "acceptanceCriteria": [
+        "relatorios-bellacapri.sql filtra ou separa por origem (whatsapp e webhook) nas consultas de funil e de conversão",
+        "Validação em transação revertida (rollback), sem deixar dado no banco",
+        "O arquivo continua rodando com -v org=<id> sem outros parâmetros",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-035",
+      "title": "Provar o webhook de entrada com valor e JSON na stack local",
+      "description": "Como mantenedor, quero a prova de que um pedido finalizado pelo webhook chega com valor e itens sem duplicar o card da Bella.",
+      "acceptanceCriteria": [
+        "Prova na stack local com fonte temporária: cliente novo cria card em Compras com valor e JSON; cliente com card da Bella em Revisão é reaproveitado sem duplicar e fecha em um envio; reenvio idêntico não altera nada",
+        "Tabela com cada passo, a resposta e o estado do card no banco anexada ao PR",
+        "Dados de teste e fonte temporária apagados, contagem de sobras zerada",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-036",
+      "title": "Documentação e release da etapa 3",
+      "description": "Como operador, quero a nota de versão e a explicação de quando usar o webhook e quando usar o rastreador.",
+      "acceptanceCriteria": [
+        "Fragmento em .changes/ e pnpm release:conferir passando",
+        "Guia com a tabela: jornada que começa no WhatsApp usa o rastreador; pedido que nasce fora usa o webhook",
+        "Registro do cuidado de duplicidade quando a mesma compra chegar pelas duas portas, e do que o produto faz nesse caso",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
