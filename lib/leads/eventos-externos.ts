@@ -120,6 +120,8 @@ export interface ResultadoDosEventos {
 export interface PedidoDoEvento {
   contatoId: string | null;
   pipelineId: string | null;
+  /** `open`, `won` ou `lost`; `null` se a linha não trouxe. */
+  status: string | null;
 }
 
 /**
@@ -135,7 +137,7 @@ export async function carregarPedidoParaEvento(
 ): Promise<PedidoDoEvento> {
   const { data: lead } = await supabase
     .from("crm_leads")
-    .select("id, contact_id, pipeline_id")
+    .select("id, contact_id, pipeline_id, status")
     .eq("organization_id", organizationId)
     .eq("id", leadId)
     .maybeSingle();
@@ -159,7 +161,8 @@ export async function carregarPedidoParaEvento(
       );
     }
   }
-  return { contatoId, pipelineId: (lead as { pipeline_id?: string | null }).pipeline_id ?? null };
+  const linha = lead as { pipeline_id?: string | null; status?: string | null };
+  return { contatoId, pipelineId: linha.pipeline_id ?? null, status: linha.status ?? null };
 }
 
 /** Dos `ids` pedidos, os que já estão gravados como evento externo deste pedido. */

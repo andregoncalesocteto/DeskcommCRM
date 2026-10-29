@@ -79,3 +79,15 @@ Feature: eventos-do-funil (docs/ralph/prd.json) · Branch: ralph/eventos-do-funi
   - Ferramenta MCP nova exige: allTools (index.ts), catalogo/funil.ts, escopo-das-escritas.ts, escopo-de-funil.ts e a lista ESCRITA_QUE_E_TRABALHO_DE_ATENDENTE no teste de capacidade; rodar tests/unit/{capacidade-alcancavel-pelo-agente,escopo-de-funil,catalogo-servido,escrita-do-turno-escopo,catalogo-tools-leigo-friendly}.
   - Cuidado ao escrever hora fixa nos testes: `at` com fuso pode cair no futuro do "agora" do teste e ser recusado pela janela.
 ---
+
+## 2026-10-29 - US-009
+- registrar.ts agora aplica ao pedido o que o cadastro pede: repetição de negócio (dedupe_path: o mesmo order_id com outro event_id vira `repetido` e não faz mais nada, nem no próprio lote), estado (custom_fields[state_key], o mais novo vence, hora lida do histórico sem contar o próprio event_id) e valor (value_path → value_cents), numa única chamada ao updateLeadHandler, depois de o evento estar no histórico.
+- Valor inválido ou ausente recusa o evento (valor_invalido) ANTES de gravar qualquer coisa. Pedido encerrado (won/lost) registra o evento mas não muda estado nem valor. event_id já gravado é reaplicado (recuperação de queda no meio da chamada anterior).
+- carregarPedidoParaEvento passou a devolver o status do pedido. A resposta de `registrado`/`repetido` ganhou `estado` e `valor`.
+- tests/unit/eventos-do-funil-registrar.test.ts: 42 casos (21 novos desta história). Banco falso entende `payload->>campo`; updateLeadHandler é espião (vi.hoisted + importOriginal).
+- Sabotagens: sem a regra de encerrado → 2 vermelhos (previsto 2); ignorar a hora do evento → 2 (2); sem repetição de negócio → 2 (2); não reaplicar event_id já gravado → 2 (previsto 1: o teste do lote misto também depende do evento reaplicado).
+- NÃO feito aqui: a sabotagem "valor depois do movimento" do critério; só existe depois da US-010 (movimento). Entra lá.
+- **Learnings for future iterations:**
+  - `vi.mock(path, async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), nome: espião }))` mantém o resto do módulo; usar o genérico Record evita o aviso de lint `import()`.
+  - A chave de negócio usa `\u0000` como separador (evento + valor) em memória; não vai ao banco.
+---

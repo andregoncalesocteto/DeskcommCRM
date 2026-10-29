@@ -9,7 +9,7 @@
  *    lista das chaves válidas; um evento recusado nunca derruba os outros do lote.
  * 3. NADA SE PERDE, NADA SE DUPLICA. Um resultado por evento, na ordem enviada; reenvio e corrida contam `repetido`.
  */
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/types";
 import type { Actor } from "@/lib/api/handlers/types";
@@ -19,6 +19,15 @@ import {
   type EventoDoFunil,
 } from "@/lib/leads/eventos-do-funil/registrar";
 import { allTools } from "@/lib/mcp/tools";
+
+// A atualização do pedido é do handler de leads (merge atômico, auditoria): aqui ele é um espião.
+const atualizacoes = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => ({})));
+vi.mock("@/app/api/v1/leads/_handler", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  updateLeadHandler: atualizacoes,
+}));
+
+beforeEach(() => atualizacoes.mockClear());
 
 const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -34,6 +43,12 @@ interface Linha {
 }
 
 /** Banco falso mínimo: só devolve a linha quando TODOS os `.eq` batem. `recusa` simula o índice único. */
+/** Lê a coluna de uma linha; `payload->>campo` entra no JSON, como o PostgREST faz. */
+function valorDa(l: Linha, coluna: string): unknown {
+  const partes = coluna.split("->>");
+  return partes.length === 2 ? (l[partes[0]!] as Linha | undefined)?.[partes[1]!] : l[coluna];
+}
+
 function bancoFalso(
   tabelas: Record<string, Linha[]>,
   recusa?: (linhas: Linha[]) => { code: string; message: string } | null,
@@ -53,7 +68,7 @@ function bancoFalso(
         return construtor;
       },
       maybeSingle: async () => {
-        const achou = (tabelas[tabela] ?? []).find((l) => filtros.every(([c, v]) => l[c] === v));
+        const achou = (tabelas[tabela] ?? []).find((l) => filtros.every(([c, v]) => valorDa(l, c) === v));
         return { data: achou ?? null, error: null };
       },
       insert: async (linhas: Linha | Linha[]) => {
@@ -61,16 +76,15 @@ function bancoFalso(
         const erro = recusa?.(lista) ?? null;
         if (erro) return { error: erro };
         inseridos.push(...lista);
+        (tabelas[tabela] ??= []).push(...lista);
         return { error: null };
       },
       then: (resolve: (v: { data: Linha[]; error: null }) => unknown) => {
-        const todas = (tabelas[tabela] ?? []).filter((l) => filtros.every(([c, v]) => l[c] === v));
+        const todas = (tabelas[tabela] ?? []).filter((l) => filtros.every(([c, v]) => valorDa(l, c) === v));
         const filtradas = emIn
           ? todas.filter((l) => {
               const [coluna, valores] = emIn as [string, unknown[]];
-              const caminho = coluna.split("->>");
-              const valor = caminho.length === 2 ? (l.payload as Linha)?.[caminho[1]!] : l[coluna];
-              return valores.includes(valor);
+              return valores.includes(valorDa(l, coluna));
             })
           : todas;
         return resolve({ data: filtradas, error: null });
@@ -298,3 +312,199 @@ describe("corrida: o banco recusa o event_id repetido (23505)", () => {
     await expect(chamar(client, [ev("page_view", "a")])).rejects.toMatchObject({ status: 500 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// repetição de negócio, estado e valor
+// ---------------------------------------------------------------------------
+
+function tabelasCom(cadastros: Linha[], extra: { status?: string; atividades?: Linha[] } = {}) {
+  const t = tabelas();
+  t.crm_pipeline_events = cadastros;
+  if (extra.status) (t.crm_leads[0] as Linha).status = extra.status;
+  if (extra.atividades) t.crm_lead_activities.push(...extra.atividades);
+  return t;
+}
+
+const atividade = (event: string, event_id: string, performed_at: string, data?: Linha): Linha => ({
+  organization_id: ORG_A, lead_id: LEAD, type: "external_event", performed_at,
+  payload: { event, event_id, at: performed_at, ...(data ? { data } : {}) },
+});
+
+const CARRINHO = cadastro("cart_sync", { state_key: "cart" });
+const COMPRA = cadastro("purchase", { state_key: "pedido", value_path: "value", value_unit: "reais", dedupe_path: "order_id" });
+const hora = (min: number) => new Date(Date.UTC(2026, 9, 29, 17, min)).toISOString();
+const ultimaAtualizacao = () => atualizacoes.mock.calls.at(-1) as unknown[];
+
+describe("repetição de negócio (dedupe_path)", () => {
+  it("o mesmo order_id com OUTRO event_id: repetido, e nada é gravado nem atualizado", async () => {
+    const { client, inseridos } = bancoFalso(
+      tabelasCom([COMPRA], { atividades: [atividade("purchase", "antigo", hora(0), { order_id: "PED-1", value: 50 })] }),
+    );
+    const r = await chamar(client, [ev("purchase", "novo", { data: { order_id: "PED-1", value: 60 } })]);
+    expect(r.resultados[0]).toEqual({ event: "purchase", event_id: "novo", resultado: "repetido" });
+    expect(inseridos).toHaveLength(0);
+    expect(atualizacoes).not.toHaveBeenCalled();
+  });
+
+  it("order_id diferente é outro fato: registra", async () => {
+    const { client, inseridos } = bancoFalso(
+      tabelasCom([COMPRA], { atividades: [atividade("purchase", "antigo", hora(0), { order_id: "PED-1", value: 50 })] }),
+    );
+    const r = await chamar(client, [ev("purchase", "novo", { data: { order_id: "PED-2", value: 60 } })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado" });
+    expect(inseridos).toHaveLength(1);
+  });
+
+  it("dois fatos com o mesmo order_id NO MESMO lote: o segundo é repetido", async () => {
+    const { client, inseridos } = bancoFalso(tabelasCom([COMPRA]));
+    const r = await chamar(client, [
+      ev("purchase", "a", { data: { order_id: "PED-9", value: 10 } }),
+      ev("purchase", "b", { data: { order_id: "PED-9", value: 10 } }),
+    ]);
+    expect(r.resultados.map((x) => x.resultado)).toEqual(["registrado", "repetido"]);
+    expect(inseridos).toHaveLength(1);
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+  });
+
+  it("evento sem o campo da chave de negócio não é tratado como repetido", async () => {
+    const { client, inseridos } = bancoFalso(tabelasCom([COMPRA]));
+    const r = await chamar(client, [ev("purchase", "a", { data: { value: 10 } }), ev("purchase", "b", { data: { value: 10 } })]);
+    expect(r.resultados.map((x) => x.resultado)).toEqual(["registrado", "registrado"]);
+    expect(inseridos).toHaveLength(2);
+  });
+
+  it("⭐ o MESMO event_id já gravado é REAPLICADO (queda no meio de uma chamada anterior): estado e valor voltam", async () => {
+    const { client, inseridos } = bancoFalso(
+      tabelasCom([COMPRA], { atividades: [atividade("purchase", "p1", hora(0), { order_id: "PED-1", value: 73.9 })] }),
+    );
+    const r = await chamar(client, [ev("purchase", "p1", { at: hora(0), data: { order_id: "PED-1", value: 73.9 } })]);
+    expect(r.resultados[0]).toEqual({ event: "purchase", event_id: "p1", resultado: "repetido", estado: "aplicado", valor: "aplicado" });
+    expect(inseridos).toHaveLength(0); // não gravou de novo
+    expect(ultimaAtualizacao()[3]).toEqual({ custom_fields: { pedido: { order_id: "PED-1", value: 73.9 } }, value_cents: 7390 });
+  });
+});
+
+describe("estado (state_key): o mais novo vence", () => {
+  const itens = (n: number) => ({ items: Array.from({ length: n }, (_, i) => ({ item_id: `i${i}` })) });
+
+  it("grava o conteúdo do evento em custom_fields[state_key], pelo handler de leads", async () => {
+    const { client } = bancoFalso(tabelasCom([CARRINHO]));
+    const r = await chamar(client, [ev("cart_sync", "c1", { data: itens(2) })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", estado: "aplicado", valor: "sem_campo" });
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+    const [, ctx, leadId, patch] = ultimaAtualizacao() as [unknown, Record<string, unknown>, string, Record<string, unknown>];
+    expect(ctx).toMatchObject({ organization_id: ORG_A, actor: ATOR });
+    expect(leadId).toBe(LEAD);
+    expect(patch).toEqual({ custom_fields: { cart: itens(2) } });
+  });
+
+  it("evento ATRASADO (hora anterior à do último da mesma chave): registrado, mas o estado não é sobrescrito", async () => {
+    const { client, inseridos } = bancoFalso(
+      tabelasCom([CARRINHO], { atividades: [atividade("cart_sync", "novo", hora(50), itens(3))] }),
+    );
+    const r = await chamar(client, [ev("cart_sync", "velho", { at: hora(40), data: itens(1) })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", estado: "ignorado_antigo" });
+    expect(inseridos).toHaveLength(1); // o histórico guarda todas as versões
+    expect(atualizacoes).not.toHaveBeenCalled();
+  });
+
+  it("hora IGUAL à do último vale (reaplicar regrava o mesmo valor)", async () => {
+    const { client } = bancoFalso(tabelasCom([CARRINHO], { atividades: [atividade("cart_sync", "outro", hora(50), itens(1))] }));
+    const r = await chamar(client, [ev("cart_sync", "este", { at: hora(50), data: itens(2) })]);
+    expect(r.resultados[0]).toMatchObject({ estado: "aplicado" });
+  });
+
+  it("⭐ no mesmo lote vence o de hora mais nova, qualquer que seja a ordem de chegada", async () => {
+    const { client } = bancoFalso(tabelasCom([CARRINHO]));
+    const r = await chamar(client, [
+      ev("cart_sync", "novo", { at: hora(50), data: itens(3) }),
+      ev("cart_sync", "velho", { at: hora(40), data: itens(1) }),
+    ]);
+    expect(r.resultados.map((x) => (x as { estado: string }).estado)).toEqual(["aplicado", "ignorado_antigo"]);
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+    expect((ultimaAtualizacao()[3] as Record<string, unknown>).custom_fields).toEqual({ cart: itens(3) });
+  });
+
+  it("outro evento (outra chave) não conta como 'último' do estado", async () => {
+    const { client } = bancoFalso(
+      tabelasCom([CARRINHO, cadastro("begin_checkout", { state_key: "checkout" })], {
+        atividades: [atividade("begin_checkout", "b1", hora(59), { value: 1 })],
+      }),
+    );
+    const r = await chamar(client, [ev("cart_sync", "c1", { at: hora(10), data: itens(1) })]);
+    expect(r.resultados[0]).toMatchObject({ estado: "aplicado" });
+  });
+
+  it("sem state_key o conteúdo não vai ao pedido, e nenhuma atualização sai", async () => {
+    const { client } = bancoFalso(tabelas());
+    const r = await chamar(client, [ev("page_view", "p1", { data: { screen_name: "home" } })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", estado: "sem_state_key", valor: "sem_campo" });
+    expect(atualizacoes).not.toHaveBeenCalled();
+  });
+});
+
+describe("valor da venda (value_path)", () => {
+  it("reais viram value_cents; estado e valor vão na MESMA atualização", async () => {
+    const { client } = bancoFalso(tabelasCom([COMPRA]));
+    const r = await chamar(client, [ev("purchase", "p1", { data: { order_id: "PED-1", value: 73.9, items: [{ item_id: "pz-1" }] } })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", estado: "aplicado", valor: "aplicado" });
+    expect(atualizacoes).toHaveBeenCalledTimes(1);
+    expect(ultimaAtualizacao()[3]).toEqual({
+      custom_fields: { pedido: { order_id: "PED-1", value: 73.9, items: [{ item_id: "pz-1" }] } },
+      value_cents: 7390,
+    });
+  });
+
+  it("unidade em centavos exige inteiro", async () => {
+    const { client } = bancoFalso(tabelasCom([cadastro("compra_cent", { value_path: "pedido.total", value_unit: "centavos" })]));
+    const ok = await chamar(client, [ev("compra_cent", "a", { data: { pedido: { total: 6890 } } })]);
+    expect(ok.resultados[0]).toMatchObject({ valor: "aplicado" });
+    expect((ultimaAtualizacao()[3] as Record<string, unknown>).value_cents).toBe(6890);
+    const ruim = await chamar(client, [ev("compra_cent", "b", { data: { pedido: { total: 68.9 } } })]);
+    expect(ruim.resultados[0]).toMatchObject({ resultado: "recusado", codigo: "valor_invalido" });
+  });
+
+  it.each([
+    ["negativo", { order_id: "P", value: -5 }],
+    ["texto", { order_id: "P", value: "muito" }],
+    ["campo ausente", { order_id: "P" }],
+    ["nulo", { order_id: "P", value: null }],
+  ])("valor %s: recusado (valor_invalido) e NADA é gravado para esse evento", async (_nome, data) => {
+    const { client, inseridos } = bancoFalso(tabelasCom([COMPRA]));
+    const r = await chamar(client, [ev("purchase", "p1", { data })]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "recusado", codigo: "valor_invalido" });
+    expect(inseridos).toHaveLength(0);
+    expect(atualizacoes).not.toHaveBeenCalled();
+  });
+
+  it("valor inválido não derruba os outros eventos do lote", async () => {
+    const { client, inseridos } = bancoFalso(tabelasCom([COMPRA, CARRINHO]));
+    const r = await chamar(client, [
+      ev("cart_sync", "c1", { data: { items: [] } }),
+      ev("purchase", "p1", { data: { order_id: "P", value: -1 } }),
+    ]);
+    expect(r.resultados.map((x) => x.resultado)).toEqual(["registrado", "recusado"]);
+    expect(inseridos).toHaveLength(1);
+  });
+
+  it("não há teto: uma venda de R$ 5.000.000 é aceita", async () => {
+    const { client } = bancoFalso(tabelasCom([COMPRA]));
+    await chamar(client, [ev("purchase", "p1", { data: { order_id: "P", value: 5_000_000 } })]);
+    expect((ultimaAtualizacao()[3] as Record<string, unknown>).value_cents).toBe(500_000_000);
+  });
+});
+
+describe("pedido encerrado", () => {
+  it.each(["won", "lost"])("pedido %s: o evento é REGISTRADO, mas estado e valor não mudam", async (status) => {
+    const { client, inseridos } = bancoFalso(tabelasCom([COMPRA, CARRINHO], { status }));
+    const r = await chamar(client, [
+      ev("cart_sync", "c1", { data: { items: [] } }),
+      ev("purchase", "p1", { data: { order_id: "P", value: 10 } }),
+    ]);
+    expect(r.resultados[0]).toMatchObject({ resultado: "registrado", estado: "ignorado_pedido_encerrado", valor: "sem_campo" });
+    expect(r.resultados[1]).toMatchObject({ resultado: "registrado", estado: "ignorado_pedido_encerrado", valor: "ignorado_pedido_encerrado" });
+    expect(inseridos).toHaveLength(2);
+    expect(atualizacoes).not.toHaveBeenCalled();
+  });
+});
+
