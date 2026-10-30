@@ -22,7 +22,7 @@ quem integra. A regra "este fato leva o card para esta etapa" é **configuraçã
 **Objetivo da etapa 1:** o funil declara os seus eventos; uma operação única do MCP registra, atualiza o estado, grava o valor
 e move o card conforme essa declaração, de forma idempotente e sem retroceder.
 
-**Fora desta etapa:** porta pública com chave para o navegador e plugin (etapa 2); valor e JSON no webhook de entrada (etapa 3).
+**Fora da etapa 1** (feitas depois, ver "Etapas 2 e 3: como ficaram"): porta pública com chave para o navegador e o script (etapa 2); valor e JSON no webhook de entrada (etapa 3).
 
 ---
 
@@ -211,7 +211,7 @@ Auth por cookie de sessão; `organization_id` sempre do JWT, nunca do corpo.
 | **3. Cadastro** | Rotas `/pipelines/[id]/events`; seção na tela com avisos e sinais de uso | Playwright em banco fresco estilo VPS, com os envs opcionais ausentes |
 | **4. Documentação e implantação** | Fragmento `.changes/`, atualização de `integracao-mcp-cardapio.md`, cadastro dos eventos da Bella Capri à mão | `pnpm release:conferir`; `gov:verify` e suíte inteira conferidos pelo rodapé |
 
-As etapas 2 e 3 do projeto (porta pública e plugin; webhook) começam só depois da Fase 4.
+As etapas 2 e 3 do projeto (porta pública e script; webhook) começam só depois da Fase 4. **Foram feitas depois: veja "Etapas 2 e 3: como ficaram", logo abaixo da seção 9.**
 
 ---
 
@@ -238,6 +238,40 @@ por chamada de `crm_track_event`: `request_id`, `organization_id`, `lead_id`, to
 - Pico de `evento_nao_cadastrado` numa organização (por exemplo, mais de 20% dos eventos em 5 minutos): quase sempre cadastro ou nome errado.
 - Falha de escrita em `api_audit_log` gera alerta e não bloqueia a mutação, como manda o `CLAUDE.md`.
 - Não há alerta de "evento parou de chegar" na etapa 1; o sinal fica na tela.
+
+---
+
+## Etapas 2 e 3: como ficaram (29/10/2026)
+
+O que foi construído depois da etapa 1, e onde **diverge** do que este documento previa ("plugin" e "porta pública com chave").
+
+### Etapa 2: o rastreador no site do cardápio
+
+| Peça | Como ficou |
+|---|---|
+| Tabela | `crm_tracker_public_keys` (migration 9041): chave `pk_` + 36 hex **gerada pelo banco**, 1 a 20 origens, rótulo, `is_active`, `revoked_at` (revogada implica inativa). RLS: só manager+ lê e escreve |
+| API de gestão | `GET/POST /api/v1/pipelines/[id]/tracker-keys`, `DELETE .../[key_id]` (revoga e mantém a linha), com o **uso** de cada chave (`ultimo_recebimento`, `recebidos_7_dias`) lido de `payload.chave_id` no histórico |
+| Porta pública | `POST/OPTIONS /api/v1/coleta/{chave}`. **A chave vai no CAMINHO**, não no corpo nem no cabeçalho: o preflight de CORS não tem corpo e precisa saber de qual chave se trata para decidir a origem. Organização e funil saem **só da linha da chave**; o corpo é `strict` |
+| Resposta | **Sempre a mesma forma** (`recebido` por evento), seja o `idtrack` bom, ruim ou sem pedido. Só com `debug: true` entra `chaves_cadastradas` (nomes dos eventos ativos, igual para qualquer `idtrack`) |
+| Identidade | `idtrack` = id do contato (UUID). Pedido = o **aberto mais recente do contato no funil da chave**; nunca cria pedido; contato pessoal ou anonimizado é descartado |
+| Confiança | Evento do navegador grava `origem = navegador`. Destino de **ganho** só fecha se o pedido já registrou um evento de **estado** (cuja etapa não é de ganho nem de perda); destino de **perda** nunca; pedido encerrado só registra. Resultados novos de `movimento`: `navegador_sem_estado_anterior` e `navegador_nao_perde` |
+| Script | `public/rastreador.js`: API manual (`init`, `track`, `optOut`, `optIn`, `flush`), fila em lote de 20 a cada 3 s, `event_id` estável, reenvio só de rede/5xx/429, `sendBeacon` na saída, sem dados pessoais. **Nome neutro** porque a imagem serve todas as marcas (o `branding.test` proíbe a marca em código que embarca) |
+| Tela | Seção "Rastreador para o site do cardápio" em Configurações › Funis (cria, copia o código, mostra o uso, revoga com confirmação) |
+
+**Divergências do desenho original:** não é "plugin" nem observa a página: a API é manual por decisão do debate. A compra pode sair do navegador (com as travas acima); o cancelamento **não**.
+**Resíduo aceito:** quem conhece o `idtrack` e forja carrinho e compra fecha o pedido daquele cliente; ver [`threat-model.md`](../threat-model.md) seção 1.2. O 404 de chave revogada não leva CORS, então o navegador o vê como erro de rede e o script tenta algumas vezes antes de desistir.
+
+### Etapa 3: o webhook de entrada com valor e JSON
+
+| Peça | Como ficou |
+|---|---|
+| Colunas | `webhook_sources.value_path` e `value_unit` (migration 9042, juntos ou nenhum) e `payload_state_key` (9043). Só entram no `PATCH` da fonte |
+| Valor | Lido do corpo cru com a mesma régua dos eventos (`resolverCaminho`, `valorEmCentavos`); grava `value_cents` na criação e no reaproveitamento/reenvio, **antes** de mover a etapa. Valor ausente ou ilegível nunca derruba o envio (log) |
+| JSON | As chaves de primeiro nível do corpo cujo valor é objeto ou lista ficam juntas sob `payload_state_key` em `custom_fields`, até 32 KB (medido em bytes). A comparação do reenvio é por JSON, não por `String()`. A chave não pode ser campo declarado do funil (recusada no `PATCH`) |
+| Tela | Seção "Valor e itens do pedido" no painel da fonte, com os avisos de etapa padrão de ganho sem valor e de "a etapa padrão vale para todo envio" |
+| Relatórios | `relatorios-bellacapri.sql` separa por origem (`whatsapp` / `webhook` / `outros`) |
+
+**Lacuna declarada:** o produto **não reconhece a mesma compra chegando pelas duas portas** (rastreador e webhook): cada uma tem a sua regra de repetição. Ver [`../integracao/webhook-ou-rastreador.md`](../integracao/webhook-ou-rastreador.md).
 
 ---
 

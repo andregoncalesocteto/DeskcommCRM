@@ -1,0 +1,316 @@
+<title>QA Eventos do Funil: Webhook</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: uma coluna de leitura, cabeçalho de rodada no topo, progresso e filtros colados abaixo, barra de ações fixa no rodapé. */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --surface-2: #eaeff1;
+  --ink: #16242b;
+  --ink-2: #4a5b64;
+  --line: #d3dcdf;
+  --accent: #0b6e7f;
+  --accent-ink: #ffffff;
+  --pass: #1b7a43;   --pass-bg: #e1f3e8;
+  --fail: #b3261e;   --fail-bg: #fbe5e3;
+  --block: #8a5a00;  --block-bg: #fbefd2;
+  --skip: #55626a;   --skip-bg: #e6eaec;
+  --pend: #3a4d57;   --pend-bg: #ffffff;
+  --focus: #0b6e7f;
+  --font: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f181c; --surface: #162328; --surface-2: #1d2d33; --ink: #e5eef1; --ink-2: #9db0b8;
+    --line: #2b3e46; --accent: #4cc0d3; --accent-ink: #062228;
+    --pass: #6fd49a; --pass-bg: #163a27; --fail: #ff9b92; --fail-bg: #43201d;
+    --block: #f2c35c; --block-bg: #3d3010; --skip: #a8b6bd; --skip-bg: #25353b;
+    --pend: #b9c9cf; --pend-bg: #162328; --focus: #4cc0d3; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f181c; --surface: #162328; --surface-2: #1d2d33; --ink: #e5eef1; --ink-2: #9db0b8;
+  --line: #2b3e46; --accent: #4cc0d3; --accent-ink: #062228;
+  --pass: #6fd49a; --pass-bg: #163a27; --fail: #ff9b92; --fail-bg: #43201d;
+  --block: #f2c35c; --block-bg: #3d3010; --skip: #a8b6bd; --skip-bg: #25353b;
+  --pend: #b9c9cf; --pend-bg: #162328; --focus: #4cc0d3; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 920px; margin: 0 auto; padding-block: 20px 120px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 1.5rem; line-height: 1.2; margin: 0 0 4px; text-wrap: balance; }
+h2 { font-size: 1.05rem; margin: 0; text-wrap: balance; }
+.sub { color: var(--ink-2); margin: 0 0 16px; font-size: .9rem; }
+.mono { font-family: var(--mono); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.session { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.session label { display: grid; gap: 4px; font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); min-width: 0; }
+.session input, .filters select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; min-width: 0; }
+details.prep { margin-bottom: 12px; }
+details.prep > summary { cursor: pointer; font-weight: 600; }
+details.prep h3 { font-size: .8rem; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); margin: 14px 0 4px; }
+details.prep ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.progress { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 10px 0; display: flex; }
+.progress span { display: block; height: 100%; }
+.counters { display: flex; flex-wrap: wrap; gap: 8px; }
+.counter { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 5px 12px; cursor: pointer; font-weight: 600; }
+.counter[aria-pressed="true"] { outline: 2px solid var(--accent); }
+.counter .n { font-variant-numeric: tabular-nums; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 14px 0 6px; align-items: end; }
+.filters label { display: grid; gap: 3px; font-size: .75rem; color: var(--ink-2); font-weight: 600; min-width: 0; }
+.shown { color: var(--ink-2); font-size: .85rem; margin: 6px 0 14px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:hover { filter: brightness(1.06); }
+.banner { background: var(--block-bg); color: var(--block); border: 1px solid var(--block); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-weight: 500; }
+.group { margin-top: 26px; }
+.group > header { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.group .gid { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+.group .gcount { margin-left: auto; color: var(--ink-2); font-size: .85rem; }
+.card { background: var(--surface); border: 1px solid var(--line); border-left-width: 6px; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.card[data-status="pass"] { border-left-color: var(--pass); }
+.card[data-status="fail"] { border-left-color: var(--fail); }
+.card[data-status="blocked"] { border-left-color: var(--block); }
+.card[data-status="skipped"] { border-left-color: var(--skip); }
+.card[data-status="pending"] { border-left-color: var(--line); }
+.card h2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.card .cid { font-family: var(--mono); font-size: .85rem; color: var(--accent); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.chip { font-size: .72rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; background: var(--surface-2); color: var(--ink-2); border-radius: 4px; padding: 2px 8px; }
+.chip.layer { color: var(--accent); }
+.cols { display: grid; gap: 10px 20px; grid-template-columns: 1fr; }
+@media (min-width: 760px) { .cols { grid-template-columns: 1fr 1.2fr 1fr; } }
+.cols section { min-width: 0; }
+.cols h3 { font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 4px; }
+.cols ul, .cols ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.note { font-size: .85rem; color: var(--ink-2); margin: 10px 0 0; overflow-wrap: anywhere; }
+.results { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.rb { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 12px; cursor: pointer; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.rb[aria-pressed="true"][data-r="pass"] { background: var(--pass-bg); color: var(--pass); border-color: var(--pass); }
+.rb[aria-pressed="true"][data-r="fail"] { background: var(--fail-bg); color: var(--fail); border-color: var(--fail); }
+.rb[aria-pressed="true"][data-r="blocked"] { background: var(--block-bg); color: var(--block); border-color: var(--block); }
+.rb[aria-pressed="true"][data-r="skipped"] { background: var(--skip-bg); color: var(--skip); border-color: var(--skip); }
+textarea { margin-top: 10px; min-height: 64px; resize: vertical; }
+textarea.expected { border-color: var(--fail); }
+.hint { font-size: .8rem; color: var(--fail); margin-top: 4px; }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); z-index: 5;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.bar .in { max-width: 920px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bar .msg { color: var(--ink-2); font-size: .85rem; margin-left: auto; min-width: 0; }
+.export { margin-top: 12px; }
+.export textarea { min-height: 160px; font-family: var(--mono); font-size: .8rem; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <h1>QA Eventos do Funil: Webhook</h1>
+  <p class="sub">Etapa 3 · Webhook de entrada (US-031 a US-036) · cenários para execução manual. O resultado fica salvo neste navegador; para levá-lo ao repositório use «Copiar resultados (JSON)».</p>
+
+  <div id="banner"></div>
+
+  <div class="panel">
+    <div class="session">
+      <label for="s-by">Testado por<input id="s-by" type="text" autocomplete="off"></label>
+      <label for="s-at">Data<input id="s-at" type="date"></label>
+      <label for="s-env">Ambiente<input id="s-env" type="text" placeholder="local, homolog…" autocomplete="off"></label>
+      <label for="s-build">Build<input id="s-build" type="text" placeholder="versão ou commit" autocomplete="off"></label>
+    </div>
+    <details class="prep" open>
+      <summary>Preparação do ambiente (leia antes do primeiro cenário)</summary>
+      <div id="prep"></div>
+    </details>
+    <div class="progress" id="progress" role="img" aria-label="Progresso da rodada"></div>
+    <div class="counters" id="counters"></div>
+  </div>
+
+  <div class="filters panel" style="margin-top:12px">
+    <label for="f-story">História<select id="f-story"></select></label>
+    <label for="f-layer">Camada<select id="f-layer"></select></label>
+    <label for="f-type">Tipo<select id="f-type"></select></label>
+    <label for="f-prio">Prioridade<select id="f-prio"></select></label>
+    <label for="f-status">Status<select id="f-status"></select></label>
+    <button class="btn" id="f-clear" type="button">Limpar filtros</button>
+  </div>
+  <p class="shown" id="shown" aria-live="polite"></p>
+
+  <div id="list"></div>
+</div>
+
+<div class="bar">
+  <div class="in">
+    <button class="btn primary" id="b-json" type="button">Copiar resultados (JSON)</button>
+    <button class="btn" id="b-md" type="button">Copiar resumo (Markdown)</button>
+    <button class="btn" id="b-clear" type="button">Limpar rodada</button>
+    <span class="msg" id="msg" role="status" aria-live="polite"></span>
+  </div>
+  <div class="in export" id="export" hidden>
+    <textarea id="export-text" readonly aria-label="Texto para copiar manualmente"></textarea>
+  </div>
+</div>
+
+<script>
+const FEATURE = "eventos-do-funil-webhook";
+const SCENARIOS = [{"id": "CT-031.1", "storyId": "US-031", "requirements": ["FR-25"], "title": "Valor em reais vira centavos no card novo", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com campo do valor «pedido.total», unidade reais, etapa padrão Compras", "Telefone 5511900000101 sem contato nem card"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo {\"external_id\":\"PED-101\",\"name\":\"Cliente Webhook 01\",\"phone\":\"5511900000101\",\"pedido\":{\"total\":73.9}}", "Abrir o card criado"], "expectedResult": ["Resposta 200 com lead_id", "O card está em Compras, ganho, com R$ 73,90 (value_cents 7390)"], "automatable": true, "notes": ""}, {"id": "CT-031.2", "storyId": "US-031", "requirements": ["FR-25"], "title": "Unidade em centavos exige inteiro", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com campo do valor «pedido.total» e unidade centavos"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 7390 e telefone 5511900000102", "Repetir com pedido.total 73.9 e telefone 5511900000103"], "expectedResult": ["Primeiro envio: card com value_cents 7390", "Segundo envio: 200, card criado sem valor, motivo no log do webhook"], "automatable": true, "notes": ""}, {"id": "CT-031.3", "storyId": "US-031", "requirements": ["FR-25"], "title": "Valor ausente: o card entra sem valor e o motivo vai para o log", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": "Visibilidade do estado do sistema", "priority": "alta", "preconditions": ["Fonte com campo do valor configurado"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo sem o campo pedido (somente external_id, name e phone 5511900000104)", "Abrir o card e depois Webhooks › Atividade"], "expectedResult": ["Resposta 200", "Card criado em Compras, sem valor", "O log do webhook registra o motivo (valor ausente)"], "automatable": true, "notes": ""}, {"id": "CT-031.4", "storyId": "US-031", "requirements": ["FR-25"], "title": "Valor ilegível ou negativo não derruba o envio", "layer": "integration", "type": "negativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com campo do valor configurado"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total «abc» e telefone 5511900000105", "Repetir com pedido.total -10 e telefone 5511900000106"], "expectedResult": ["As duas respostas são 200", "Os dois cards são criados sem valor", "O log registra o motivo de cada um"], "automatable": true, "notes": ""}, {"id": "CT-031.5", "storyId": "US-031", "requirements": ["FR-25"], "title": "Arredondamento, zero e valor muito grande", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Fonte em reais"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 19.999 (telefone ...107)", "Enviar com pedido.total 0 (telefone ...108)", "Enviar com pedido.total 99999999.99 (telefone ...109)"], "expectedResult": ["19.999 vira 2000 centavos", "0 grava valor 0", "99999999.99 grava 9999999999 (sem teto)"], "automatable": true, "notes": ""}, {"id": "CT-031.6", "storyId": "US-031", "requirements": ["FR-25"], "title": "Card reaproveitado recebe o valor antes de mudar de etapa", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Opção «reaproveitar o card aberto» ligada, com assinatura", "Contato «Cliente Bella 02» (telefone 5511900000110) com pedido aberto em Revisão, sem valor, nascido no WhatsApp"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo assinado, com external_id «PED-110», phone 5511900000110 e pedido.total 59.9", "Contar os cards do contato", "Abrir o card"], "expectedResult": ["A resposta traz o MESMO lead_id do card que já existia", "O contato continua com 1 só card", "O card foi de Revisão para Compras, ganho, com R$ 59,90"], "automatable": true, "notes": ""}, {"id": "CT-031.7", "storyId": "US-031", "requirements": ["FR-25"], "title": "Reenvio idêntico não altera nada", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Estado final do CT-031.1 ou CT-031.6"], "steps": ["Anotar etapa, valor, campos e o número de atividades do card", "Enviar o mesmo corpo de novo, com o mesmo external_id", "Comparar"], "expectedResult": ["Resposta 200 com o mesmo lead_id", "Etapa, valor, JSON e número de atividades idênticos aos anotados", "Continua 1 card"], "automatable": true, "notes": ""}, {"id": "CT-031.8", "storyId": "US-031", "requirements": ["FR-25"], "title": "Fonte sem a configuração nova se comporta como antes", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte antiga «Pedidos Antigos» sem campo do valor e sem chave de JSON, com etapa padrão Conversas"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 73.9, itens e telefone 5511900000111"], "expectedResult": ["Resposta 200", "Card criado em Conversas, sem valor", "custom_fields não tem a lista de itens nem o bloco pedido (o aninhado é descartado, como sempre foi)"], "automatable": true, "notes": ""}, {"id": "CT-031.9", "storyId": "US-031", "requirements": ["FR-25"], "title": "Assinatura inválida e token inexistente continuam recusando", "layer": "integration", "type": "nfr", "nfr": "seguranca", "heuristic": null, "priority": "media", "preconditions": ["Fonte com segredo configurado"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com assinatura errada", "Enviar para um token que não existe"], "expectedResult": ["Assinatura errada: 401", "Token inexistente: 404", "Nenhum card é criado"], "automatable": true, "notes": ""}, {"id": "CT-032.1", "storyId": "US-032", "requirements": ["FR-26"], "title": "Itens e blocos aninhados são guardados como vieram", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com a chave de JSON «pedido_json»"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 73.9, pedido.forma «pix» e itens [{item_id: pizza-1, nome: Pizza grande, qtd: 2}] (telefone ...120)", "Abrir o card e olhar custom_fields.pedido_json"], "expectedResult": ["custom_fields.pedido_json contém o bloco pedido e a lista itens, idênticos ao enviado"], "automatable": true, "notes": ""}, {"id": "CT-032.2", "storyId": "US-032", "requirements": ["FR-26"], "title": "Sem a configuração, o aninhado continua descartado", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com campo do valor mas SEM chave de JSON"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo o mesmo corpo do CT-032.1, telefone ...121"], "expectedResult": ["O card é criado", "custom_fields não guarda a lista de itens nem o bloco pedido"], "automatable": true, "notes": ""}, {"id": "CT-032.3", "storyId": "US-032", "requirements": ["FR-26"], "title": "Limite de tamanho do JSON: abaixo passa, acima é recusado no log", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com chave de JSON «pedido_json»"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com um bloco aninhado de cerca de 31 KB (telefone ...122)", "Enviar outro com cerca de 33 KB (telefone ...123)", "Abrir Webhooks › Atividade"], "expectedResult": ["31 KB: o JSON é guardado", "33 KB: o card é criado SEM o JSON e o log traz o motivo (tamanho acima do limite)", "Os dois envios respondem 200"], "automatable": true, "notes": "O limite de 32 KB vem do guia da etapa; o PRD só diz «limite de tamanho»."}, {"id": "CT-032.4", "storyId": "US-032", "requirements": ["FR-26"], "title": "Lista vazia e objeto vazio", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "baixa", "preconditions": ["Fonte com chave de JSON"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com itens [] e pedido {} (telefone ...124)"], "expectedResult": ["Resposta 200 e card criado", "Nada quebra; o card guarda o que veio (vazio) ou não guarda nada, o QA anota qual"], "automatable": true, "notes": ""}, {"id": "CT-032.5", "storyId": "US-032", "requirements": ["FR-26"], "title": "Reenvio não altera o JSON guardado", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Card do CT-032.1"], "steps": ["Reenviar o mesmo corpo", "Reenviar com itens diferentes e o MESMO external_id", "Comparar pedido_json"], "expectedResult": ["No reenvio idêntico nada muda", "No reenvio com itens diferentes, o comportamento é o da fonte para reenvio (o QA anota se o JSON mudou ou não)"], "automatable": true, "notes": "A especificação só garante o reenvio idêntico."}, {"id": "CT-033.1", "storyId": "US-033", "requirements": ["FR-25", "FR-26"], "title": "A fonte mostra a seção «Valor e itens do pedido»", "layer": "e2e", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte «Pedidos Plataforma» criada"], "steps": ["Abrir Webhooks › Receber dados", "Abrir a fonte «Pedidos Plataforma»", "Procurar a seção «Valor e itens do pedido»"], "expectedResult": ["A seção existe com os campos «Campo do valor do pedido» (com a unidade reais/centavos) e «Guardar os itens e os demais dados aninhados em»", "Cada campo tem uma explicação em linguagem simples"], "automatable": false, "notes": ""}, {"id": "CT-033.2", "storyId": "US-033", "requirements": ["FR-25", "FR-26"], "title": "Salvar e reabrir mantém os valores", "layer": "e2e", "type": "sucesso", "nfr": null, "heuristic": "Visibilidade do estado do sistema", "priority": "alta", "preconditions": ["Seção aberta"], "steps": ["Preencher o campo do valor com pedido.total e a unidade reais", "Preencher o campo dos itens com pedido_json", "Salvar a fonte, recarregar a página e reabrir a fonte"], "expectedResult": ["Os três valores continuam preenchidos"], "automatable": false, "notes": ""}, {"id": "CT-033.3", "storyId": "US-033", "requirements": ["FR-25"], "title": "Aviso: etapa padrão de ganho sem campo do valor", "layer": "e2e", "type": "sucesso", "nfr": null, "heuristic": "Prevenção de erros", "priority": "alta", "preconditions": ["Fonte com etapa padrão Compras (ganho) e campo do valor VAZIO"], "steps": ["Abrir a seção «Valor e itens do pedido»"], "expectedResult": ["A tela mostra um aviso dizendo que a venda chegará sem valor", "O aviso não impede salvar"], "automatable": false, "notes": "Texto exato do aviso não consta nos insumos; o QA anota o que leu."}, {"id": "CT-033.4", "storyId": "US-033", "requirements": ["FR-25"], "title": "O aviso some quando faz sentido", "layer": "e2e", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Mesma fonte, aviso visível"], "steps": ["Preencher o campo do valor", "Em seguida, esvaziar o campo e trocar a etapa padrão para Conversas (não é de ganho)"], "expectedResult": ["Com o campo do valor preenchido, o aviso desaparece", "Com etapa padrão que não é de ganho, o aviso também não aparece"], "automatable": false, "notes": ""}, {"id": "CT-033.5", "storyId": "US-033", "requirements": ["FR-25"], "title": "Aviso: a etapa padrão vale para todo envio da fonte", "layer": "e2e", "type": "sucesso", "nfr": null, "heuristic": "Correspondência entre o sistema e o mundo real", "priority": "media", "preconditions": ["Qualquer fonte aberta"], "steps": ["Olhar a área da etapa padrão da fonte"], "expectedResult": ["Há um texto explicando que a etapa padrão vale para todo envio daquela fonte"], "automatable": false, "notes": ""}, {"id": "CT-033.6", "storyId": "US-033", "requirements": ["FR-26"], "title": "Chave do JSON igual a campo do funil é bloqueada", "layer": "e2e", "type": "negativo", "nfr": null, "heuristic": "Ajuda para reconhecer e recuperar de erros", "priority": "alta", "preconditions": ["O funil tem o campo «Observação» (chave observacao)"], "steps": ["Preencher «Guardar os itens e os demais dados aninhados em» com observacao", "Tentar salvar"], "expectedResult": ["A tela recusa com mensagem explicando o conflito com o campo do funil", "A fonte não é salva com essa chave"], "automatable": false, "notes": ""}, {"id": "CT-033.7", "storyId": "US-033", "requirements": ["FR-26"], "title": "Esvaziar os campos volta ao comportamento antigo", "layer": "e2e", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Fonte com valor e JSON configurados"], "steps": ["Esvaziar os dois campos e salvar", "Enviar o corpo do CT-032.1 (telefone novo)"], "expectedResult": ["O card é criado sem valor e sem o JSON"], "automatable": false, "notes": ""}, {"id": "CT-033.8", "storyId": "US-033", "requirements": ["FR-25"], "title": "Texto com HTML no nome da fonte aparece como texto", "layer": "e2e", "type": "nfr", "nfr": "seguranca", "heuristic": null, "priority": "baixa", "preconditions": ["Fonte chamada «<b>x<\/b><img src=x onerror=alert(1)>»"], "steps": ["Abrir a lista de fontes e a fonte"], "expectedResult": ["O nome aparece literalmente, sem executar nada"], "automatable": false, "notes": ""}, {"id": "CT-033.9", "storyId": "US-033", "requirements": ["FR-25"], "title": "Teclado e celular", "layer": "e2e", "type": "nfr", "nfr": "usabilidade", "heuristic": null, "priority": "baixa", "preconditions": ["Janela em 375 px"], "steps": ["Abrir a seção e conferir se cabe", "Preencher os campos e salvar usando só Tab e Enter"], "expectedResult": ["Não há rolagem horizontal da página", "Todos os controles têm foco visível e funcionam pelo teclado"], "automatable": false, "notes": ""}, {"id": "CT-033.10", "storyId": "US-033", "requirements": ["FR-25"], "title": "Atendente não altera a fonte", "layer": "e2e", "type": "nfr", "nfr": "seguranca", "heuristic": null, "priority": "media", "preconditions": ["Sessão de atendente@teste.local"], "steps": ["Abrir Webhooks › Receber dados e tentar editar a fonte"], "expectedResult": ["Não há como salvar mudanças (acesso negado, somente leitura ou seção oculta)"], "automatable": false, "notes": "Comportamento exato não está nos insumos; o QA anota o que viu."}, {"id": "CT-034.1", "storyId": "US-034", "requirements": ["FR-27"], "title": "O relatório separa os cards por origem", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["3 cards: um nascido no WhatsApp ainda em Conversas, um nascido no WhatsApp e ganho, e um nascido pelo webhook já ganho (CT-031.1)"], "steps": ["Rodar psql -v org=<id da organização A> -f .business/bellacapri/relatorios-bellacapri.sql", "Procurar nas consultas de funil e de conversão a coluna origem"], "expectedResult": ["As consultas trazem uma coluna origem com os valores whatsapp, webhook e (para card sem origem) outros", "A linha webhook mostra 1 card ganho; a linha whatsapp mostra 2 cards, 1 ganho"], "automatable": true, "notes": ""}, {"id": "CT-034.2", "storyId": "US-034", "requirements": ["FR-27"], "title": "A conversão da conversa à compra não conta o card do webhook", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Mesmos dados do CT-034.1"], "steps": ["Ler a taxa de conversão da conversa à compra do relatório, linha whatsapp"], "expectedResult": ["A taxa é 1 compra em 2 conversas (50%), sem contar o card do webhook"], "automatable": true, "notes": ""}, {"id": "CT-034.3", "storyId": "US-034", "requirements": ["FR-27"], "title": "O arquivo roda só com -v org, sem outros parâmetros", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Nenhuma variável além de org definida"], "steps": ["Rodar psql -v org=<id> -f relatorios-bellacapri.sql sem nenhum outro -v"], "expectedResult": ["Todas as consultas rodam sem erro de variável não definida"], "automatable": true, "notes": ""}, {"id": "CT-034.4", "storyId": "US-034", "requirements": ["FR-27"], "title": "Rodar o relatório não deixa dado no banco", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Contar linhas de crm_leads e crm_lead_activities da organização antes"], "steps": ["Rodar o relatório", "Contar de novo"], "expectedResult": ["As contagens são idênticas antes e depois"], "automatable": true, "notes": ""}, {"id": "CT-034.5", "storyId": "US-034", "requirements": ["FR-27"], "title": "Sem nenhum card do webhook, a conversão do WhatsApp não muda", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Organização com apenas cards nascidos no WhatsApp"], "steps": ["Rodar o relatório"], "expectedResult": ["Não há linha webhook (ou ela vem zerada)", "A taxa da linha whatsapp é a mesma que o relatório antigo mostrava para essa organização"], "automatable": true, "notes": ""}, {"id": "CT-035.1", "storyId": "US-035", "requirements": ["FR-25", "FR-26"], "title": "Cliente novo: card em Compras com valor e JSON", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Fonte com valor «pedido.total» em reais e JSON em «pedido_json»; telefone 5511900000130 sem contato"], "steps": ["enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo {\"external_id\":\"PED-130\",\"name\":\"Cliente Novo\",\"phone\":\"5511900000130\",\"pedido\":{\"total\":73.9,\"forma\":\"pix\"},\"itens\":[{\"item_id\":\"pizza-1\",\"qtd\":2}]}"], "expectedResult": ["Um contato e um card são criados", "O card está em Compras, ganho, R$ 73,90, com pedido_json guardado"], "automatable": true, "notes": ""}, {"id": "CT-035.2", "storyId": "US-035", "requirements": ["FR-25"], "title": "Cliente da Bella em Revisão fecha em um envio, sem duplicar", "layer": "integration", "type": "sucesso", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Opção «reaproveitar o card aberto» ligada, com assinatura", "Contato com pedido aberto em Revisão, nascido no WhatsApp (origem whatsapp)"], "steps": ["Enviar o pedido finalizado assinado com o telefone desse contato e pedido.total 59.9", "Contar os cards do contato e abrir o card"], "expectedResult": ["Continua 1 só card", "Ele foi para Compras, ganho, com R$ 59,90 e JSON", "A origem do card continua whatsapp"], "automatable": true, "notes": ""}, {"id": "CT-035.3", "storyId": "US-035", "requirements": ["FR-25"], "title": "Contato conhecido sem card aberto recebe um card novo", "layer": "integration", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "media", "preconditions": ["Contato com um card antigo já ganho e nenhum aberto"], "steps": ["Enviar um pedido finalizado com o telefone desse contato"], "expectedResult": ["O contato passa a ter 2 cards: o antigo intacto e um novo em Compras com o valor do envio"], "automatable": true, "notes": ""}, {"id": "CT-036.1", "storyId": "US-036", "requirements": ["FR-25", "FR-21"], "title": "Mesma compra pelo rastreador e depois pelo webhook gera dois cards", "layer": "e2e", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Etapa 2 pronta (chave e página de teste)", "Cliente com pedido aberto em Revisão, com carrinho gravado", "Opção «reaproveitar o card aberto» ligada"], "steps": ["Pela página de teste (?idtrack do contato), clicar em «Comprar» (order_id P-1042): o card fecha em Compras", "Em seguida, enviar pelo webhook a mesma compra (mesmo telefone, valor 73.9)", "Contar os cards do contato em Compras"], "expectedResult": ["O contato fica com DOIS cards em Compras (o fechado pelo rastreador e um novo criado pelo webhook)"], "automatable": false, "notes": "Limite documentado em docs/integracao/webhook-ou-rastreador.md: o produto não reconhece a mesma compra nas duas portas. O cenário existe para o QA confirmar que o comportamento é exatamente o descrito, e para a equipe decidir se muda."}, {"id": "CT-036.2", "storyId": "US-036", "requirements": ["FR-25", "FR-21"], "title": "Mesma compra pelo webhook e depois pelo rastreador não duplica o card", "layer": "e2e", "type": "alternativo", "nfr": null, "heuristic": null, "priority": "alta", "preconditions": ["Cliente com pedido aberto em Revisão", "Opção «reaproveitar o card aberto» ligada"], "steps": ["Enviar pelo webhook a compra (valor 73.9): o card fecha em Compras", "Pela página de teste (?idtrack do contato), clicar em «Comprar»", "Contar os cards do contato e olhar o valor"], "expectedResult": ["Continua 1 só card em Compras com R$ 73,90", "O valor não dobra"], "automatable": false, "notes": "O guia diz que a compra do navegador «só registra o evento» e que o histórico mostra a compra duas vezes; isso depende da pergunta em aberto sobre pedido encerrado (ver coverage.blockedByOpenQuestions). O QA anota se a compra do navegador apareceu na linha do tempo."}];
+const PREP = [{"titulo": "Pré-requisito", "itens": ["As Etapas 1 e 2 estão aprovadas. Funil «Pedidos Bella» na organização A com as etapas Conversas · Chamar humano · Visitou o cardápio · Viu um item · Carrinho · Revisão · Compras (ganho) · Cancelado (perda) e o campo declarado «Observação» (chave observacao). {CRM} é o endereço do app.", "Logado como gerente@teste.local (organização A). Atendente: atendente@teste.local."]}, {"titulo": "A fonte do webhook", "itens": ["Em Webhooks › Receber dados, criar a fonte «Pedidos Plataforma»: funil «Pedidos Bella», etapa padrão Compras. Anotar o endereço de recebimento: .../api/v1/webhooks/in/<TOKEN>. Cenários que mudam a fonte dizem como.", "Quando um cenário falar em «reaproveitar o card aberto», ligar essa opção na fonte; ela exige assinatura: configurar o segredo da fonte e assinar os envios do jeito que a própria tela da fonte indica (cabeçalho e algoritmo)."]}, {"titulo": "Envio de exemplo", "itens": ["Corpo básico: {\"external_id\":\"PED-100\",\"name\":\"Cliente Webhook 01\",\"phone\":\"5511900000101\",\"pedido\":{\"total\":73.9,\"forma\":\"pix\"},\"itens\":[{\"item_id\":\"pizza-1\",\"nome\":\"Pizza grande\",\"qtd\":2}]}. Para cada cenário, trocar external_id e telefone para não colidir com envios anteriores.", "Resposta esperada de sucesso: 200 com {\"data\":{\"lead_id\":\"...\"}}."]}, {"titulo": "Como conferir o resultado", "itens": ["Card: etapa, ganho, valor e campos (abrir o card ou GET /api/v1/leads/{lead_id}: stage, value_cents, custom_fields).", "Log do webhook: Webhooks › Atividade (motivos de valor ou JSON descartados aparecem aqui).", "Quantidade de cards do contato: lista de pedidos do contato ou select count(*) from crm_leads where contact_id = '<id>'.", "Relatórios: arquivo .business/bellacapri/relatorios-bellacapri.sql, rodado com psql -v org=<id da organização> -f relatorios-bellacapri.sql."]}];
+const KEY = "test-run:" + FEATURE;
+const R = {
+  pass: { label: "Passou", glyph: "✓", color: "var(--pass)" },
+  fail: { label: "Falhou", glyph: "✕", color: "var(--fail)" },
+  blocked: { label: "Bloqueado", glyph: "⊘", color: "var(--block)" },
+  skipped: { label: "Não executado", glyph: "↷", color: "var(--skip)" },
+  pending: { label: "Pendente", glyph: "○", color: "var(--line)" }
+};
+const ORDER = ["pass", "fail", "blocked", "skipped", "pending"];
+const LAYER = { integration: "integração", e2e: "e2e" };
+const TYPE = { sucesso: "sucesso", alternativo: "alternativo", negativo: "negativo", nfr: "não funcional" };
+const PRIO = { alta: "alta", media: "média", baixa: "baixa" };
+
+let state = { session: { by: "", at: "", env: "", build: "" }, results: {}, specIds: [] };
+let filters = { story: "", layer: "", type: "", prio: "", status: "" };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const today = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const s = JSON.parse(raw); if (s && s.results) state = Object.assign(state, s); }
+  } catch (e) {}
+  if (!state.session.at) state.session.at = today();
+}
+function save() {
+  try { state.specIds = SCENARIOS.map((s) => s.id); localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+}
+function res(id) { return (state.results[id] && state.results[id].result) || "pending"; }
+function counts() {
+  const c = { pass: 0, fail: 0, blocked: 0, skipped: 0, pending: 0 };
+  SCENARIOS.forEach((s) => { c[res(s.id)]++; });
+  return c;
+}
+
+function renderPrep() {
+  $("prep").innerHTML = PREP.map((b) => "<h3>" + esc(b.titulo) + "</h3><ul>" + b.itens.map((i) => "<li>" + esc(i) + "</li>").join("") + "</ul>").join("");
+}
+
+function renderBanner() {
+  const saved = state.specIds || [];
+  const current = SCENARIOS.map((s) => s.id);
+  if (!saved.length) { $("banner").innerHTML = ""; return; }
+  const added = current.filter((id) => saved.indexOf(id) < 0);
+  const gone = saved.filter((id) => current.indexOf(id) < 0);
+  if (added.length || gone.length) {
+    $("banner").innerHTML = '<div class="banner">A spec mudou desde a última vez que você abriu esta rodada: ' + added.length + " cenário(s) novo(s) ficam pendentes" + (gone.length ? " e " + gone.length + " cenário(s) saíram da spec (os resultados deles continuam guardados, mas não são exportados)" : "") + ".</div>";
+  } else $("banner").innerHTML = "";
+}
+
+function renderTop() {
+  const c = counts(), total = SCENARIOS.length;
+  const done = total - c.pending;
+  $("progress").innerHTML = ORDER.filter((k) => k !== "pending").map((k) => '<span style="width:' + (c[k] / total * 100) + '%;background:' + R[k].color + '"></span>').join("");
+  $("progress").setAttribute("aria-label", "Executados: " + done + " de " + total);
+  $("counters").innerHTML = ORDER.map((k) => '<button type="button" class="counter" data-k="' + k + '" aria-pressed="' + (filters.status === k) + '"><span aria-hidden="true" style="color:' + R[k].color + '">' + R[k].glyph + '</span>' + R[k].label + ' <span class="n">' + c[k] + '</span></button>').join("") + '<span class="counter" style="cursor:default" aria-live="polite"><span class="n">' + done + "/" + total + "</span> executados</span>";
+  document.querySelectorAll(".counter[data-k]").forEach((b) => b.addEventListener("click", () => { filters.status = filters.status === b.dataset.k ? "" : b.dataset.k; syncFilterControls(); render(); }));
+}
+
+function opt(v, l, sel) { return '<option value="' + esc(v) + '"' + (sel ? " selected" : "") + ">" + esc(l) + "</option>"; }
+function buildFilters() {
+  const stories = []; SCENARIOS.forEach((s) => { if (stories.indexOf(s.storyId) < 0) stories.push(s.storyId); });
+  $("f-story").innerHTML = opt("", "Todas") + stories.map((x) => opt(x, x)).join("");
+  $("f-layer").innerHTML = opt("", "Todas") + Object.keys(LAYER).map((k) => opt(k, LAYER[k])).join("");
+  $("f-type").innerHTML = opt("", "Todos") + Object.keys(TYPE).map((k) => opt(k, TYPE[k])).join("");
+  $("f-prio").innerHTML = opt("", "Todas") + Object.keys(PRIO).map((k) => opt(k, PRIO[k])).join("");
+  $("f-status").innerHTML = opt("", "Todos") + ORDER.map((k) => opt(k, R[k].label)).join("");
+}
+function syncFilterControls() {
+  $("f-story").value = filters.story; $("f-layer").value = filters.layer; $("f-type").value = filters.type; $("f-prio").value = filters.prio; $("f-status").value = filters.status;
+}
+function passes(s) {
+  return (!filters.story || s.storyId === filters.story) && (!filters.layer || s.layer === filters.layer) && (!filters.type || s.type === filters.type) && (!filters.prio || s.priority === filters.prio) && (!filters.status || res(s.id) === filters.status);
+}
+
+function li(a) { return a.map((x) => "<li>" + esc(x) + "</li>").join(""); }
+function card(s) {
+  const st = res(s.id), cur = state.results[s.id] || {};
+  const need = (st === "fail" || st === "blocked") && !(cur.description || "").trim();
+  const chips = ['<span class="chip layer">' + LAYER[s.layer] + "</span>", '<span class="chip">' + TYPE[s.type] + (s.nfr ? " · " + esc(s.nfr) : "") + "</span>", '<span class="chip">prioridade ' + PRIO[s.priority] + "</span>"]
+    .concat(s.requirements.map((r) => '<span class="chip">' + esc(r) + "</span>")).join("");
+  const btns = ["pass", "fail", "blocked", "skipped"].map((k) => '<button type="button" class="rb" data-id="' + s.id + '" data-r="' + k + '" aria-pressed="' + (st === k) + '"><span aria-hidden="true">' + R[k].glyph + "</span>" + R[k].label + "</button>").join("");
+  const notes = [s.heuristic ? "Heurística: " + s.heuristic : "", s.notes ? "Nota: " + s.notes : "", s.automatable ? "Automatizável" : ""].filter(Boolean);
+  return '<article class="card" data-status="' + st + '" id="' + s.id + '"><h2><span class="cid">' + s.id + "</span>" + esc(s.title) + '</h2><div class="chips">' + chips + '</div>' +
+    '<div class="cols"><section><h3>Pré-condições</h3><ul>' + li(s.preconditions) + '</ul></section><section><h3>Steps para reproduzir</h3><ol>' + li(s.steps) + '</ol></section><section><h3>Resultado esperado</h3><ul>' + li(s.expectedResult) + "</ul></section></div>" +
+    (notes.length ? '<p class="note">' + notes.map(esc).join(" · ") + "</p>" : "") +
+    '<div class="results" role="group" aria-label="Resultado de ' + s.id + '">' + btns + "</div>" +
+    '<textarea id="obs-' + s.id + '" data-id="' + s.id + '" class="obs' + (need ? " expected" : "") + '" placeholder="o que aconteceu, evidência, link do bug">' + esc(cur.description || "") + "</textarea>" +
+    (need ? '<div class="hint">Anote o que aconteceu (não impede o registro).</div>' : "") + "</article>";
+}
+
+function render() {
+  renderTop(); renderBanner();
+  const list = SCENARIOS.filter(passes);
+  $("shown").textContent = "Mostrando " + list.length + " de " + SCENARIOS.length + " cenários.";
+  const by = {}; list.forEach((s) => { (by[s.storyId] = by[s.storyId] || []).push(s); });
+  $("list").innerHTML = Object.keys(by).map((sid) => {
+    const all = SCENARIOS.filter((s) => s.storyId === sid), done = all.filter((s) => res(s.id) !== "pending").length;
+    return '<section class="group"><header><span class="gid">' + sid + "</span><h2>" + esc(STORY[sid] || "") + '</h2><span class="gcount">' + done + "/" + all.length + " executados</span></header>" + by[sid].map(card).join("") + "</section>";
+  }).join("");
+  document.querySelectorAll(".rb").forEach((b) => b.addEventListener("click", () => setResult(b.dataset.id, b.dataset.r)));
+  document.querySelectorAll("textarea.obs").forEach((t) => {
+    t.addEventListener("input", () => { const id = t.dataset.id; state.results[id] = Object.assign({ result: "pending" }, state.results[id], { description: t.value }); save(); });
+    t.addEventListener("change", render);
+  });
+}
+function setResult(id, r) {
+  const cur = state.results[id] || { result: "pending", description: "" };
+  cur.result = cur.result === r ? "pending" : r;
+  state.results[id] = cur; save();
+  const y = window.scrollY; render(); window.scrollTo(0, y);
+  const el = document.querySelector('.rb[data-id="' + id + '"][data-r="' + r + '"]'); if (el) el.focus({ preventScroll: true });
+}
+
+function exportJson() {
+  const ids = SCENARIOS.map((s) => s.id);
+  const results = ids.filter((id) => res(id) !== "pending").map((id) => ({ id: id, result: res(id), description: (state.results[id].description || "").trim() }));
+  return JSON.stringify({ feature: FEATURE, session: { executedBy: state.session.by || null, executedAt: state.session.at || null, environment: state.session.env || null, build: state.session.build || null }, results: results }, null, 2);
+}
+function exportMd() {
+  const c = counts();
+  let t = "# " + document.title + "\n\n" + "Testado por: " + (state.session.by || "—") + " · Data: " + (state.session.at || "—") + " · Ambiente: " + (state.session.env || "—") + " · Build: " + (state.session.build || "—") + "\n\n";
+  t += "Passou " + c.pass + " · Falhou " + c.fail + " · Bloqueado " + c.blocked + " · Não executado " + c.skipped + " · Pendente " + c.pending + "\n\n| ID | Título | Status | Observação |\n|---|---|---|---|\n";
+  SCENARIOS.forEach((s) => { t += "| " + s.id + " | " + s.title.replace(/\|/g, "\\|") + " | " + R[res(s.id)].label + " | " + ((state.results[s.id] && state.results[s.id].description) || "").replace(/\|/g, "\\|").replace(/\n/g, " ") + " |\n"; });
+  return t;
+}
+function say(m) { $("msg").textContent = m; clearTimeout(say.t); say.t = setTimeout(() => { $("msg").textContent = ""; }, 6000); }
+async function copy(text, what) {
+  try { await navigator.clipboard.writeText(text); $("export").hidden = true; say(what + " copiado."); }
+  catch (e) {
+    $("export").hidden = false; const ta = $("export-text"); ta.value = text; ta.focus(); ta.select();
+    say("Não foi possível copiar sozinho. O texto está selecionado: use Ctrl+C.");
+  }
+}
+
+let armed = false;
+function clearRound() {
+  const b = $("b-clear");
+  if (!armed) { armed = true; b.textContent = "Confirmar: apagar tudo"; setTimeout(() => { armed = false; b.textContent = "Limpar rodada"; }, 4000); return; }
+  armed = false; b.textContent = "Limpar rodada"; state.results = {}; save(); render(); say("Rodada limpa.");
+}
+
+function bindSession() {
+  const map = { "s-by": "by", "s-at": "at", "s-env": "env", "s-build": "build" };
+  Object.keys(map).forEach((id) => { $(id).value = state.session[map[id]] || ""; $(id).addEventListener("input", () => { state.session[map[id]] = $(id).value; save(); }); });
+}
+
+const STORY = {"US-035": "Provar o webhook de entrada com valor e JSON na stack local", "US-033": "Tela da fonte do webhook: valor e JSON", "US-031": "Webhook de entrada: valor da venda em value_cents", "US-032": "Webhook de entrada: guardar o JSON do pedido", "US-036": "Documentação e release da etapa 3", "US-034": "Relatórios separados por origem do pedido"};
+load(); buildFilters(); renderPrep(); bindSession(); render(); save();
+[["f-story", "story"], ["f-layer", "layer"], ["f-type", "type"], ["f-prio", "prio"], ["f-status", "status"]].forEach(([id, k]) => $(id).addEventListener("change", () => { filters[k] = $(id).value; render(); }));
+$("f-clear").addEventListener("click", () => { filters = { story: "", layer: "", type: "", prio: "", status: "" }; syncFilterControls(); render(); });
+$("b-json").addEventListener("click", () => copy(exportJson(), "Resultados (JSON)"));
+$("b-md").addEventListener("click", () => copy(exportMd(), "Resumo (Markdown)"));
+$("b-clear").addEventListener("click", clearRound);
+</script>

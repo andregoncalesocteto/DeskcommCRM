@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "diagram_type": "fluxo",
+  "meta": {
+    "titulo": "Eventos do funil: do site e do servidor do cardápio ao card que anda",
+    "pergunta": "O que o cliente faz fora do WhatsApp, por onde chega ao CRM, quem decide para onde o pedido vai e onde a equipe vê isso?",
+    "resumo": "Cada funil cadastra os eventos que aceita. Três portas os trazem: o MCP (servidor, com token), o rastreador no navegador (chave pública, com travas) e o webhook de entrada (valor e JSON). Uma só operação valida contra o cadastro, grava o fato no histórico, aplica estado e valor e move a etapa sem retroceder. A equipe cadastra, instala e confere o uso na tela."
+  },
+  "lanes": [
+    {
+      "id": "fora",
+      "label": "Quem conta o que o cliente fez"
+    },
+    {
+      "id": "portas",
+      "label": "Por onde entra"
+    },
+    {
+      "id": "regras",
+      "label": "O que o CRM decide"
+    },
+    {
+      "id": "dados",
+      "label": "Onde fica guardado"
+    },
+    {
+      "id": "tela",
+      "label": "O que a equipe configura e vê"
+    }
+  ],
+  "mainPath": [
+    "cardapio_site",
+    "script",
+    "coleta",
+    "identificar",
+    "registrar",
+    "movimento",
+    "pedido",
+    "tela_eventos"
+  ],
+  "nodes": [
+    {
+      "id": "cardapio_servidor",
+      "lane": "fora",
+      "col": 1,
+      "type": "external",
+      "label": "Servidor do cardápio",
+      "sublabel": "token de API; valor definitivo e cancelamento"
+    },
+    {
+      "id": "cardapio_site",
+      "lane": "fora",
+      "col": 2,
+      "type": "external",
+      "label": "Site do cardápio",
+      "sublabel": "script colado; ?idtrack= no link"
+    },
+    {
+      "id": "plataforma",
+      "lane": "fora",
+      "col": 3,
+      "type": "external",
+      "label": "Plataforma de pedidos",
+      "sublabel": "avisa o pedido finalizado por webhook"
+    },
+    {
+      "id": "mcp",
+      "lane": "portas",
+      "col": 1,
+      "type": "route",
+      "label": "POST /api/mcp",
+      "sublabel": "crm_track_event · crm_list_pipeline_events"
+    },
+    {
+      "id": "coleta",
+      "lane": "portas",
+      "col": 2,
+      "type": "route",
+      "label": "POST /api/v1/coleta/{chave}",
+      "sublabel": "chave pública no caminho; CORS por origem; limite de taxa"
+    },
+    {
+      "id": "webhook",
+      "lane": "portas",
+      "col": 3,
+      "type": "route",
+      "label": "POST /api/v1/webhooks/in/{token}",
+      "sublabel": "valor em value_cents; JSON do pedido"
+    },
+    {
+      "id": "script",
+      "lane": "portas",
+      "col": 4,
+      "type": "frontend",
+      "label": "public/rastreador.js",
+      "sublabel": "fila em lote; sem dados pessoais; idtrack validado"
+    },
+    {
+      "id": "registrar",
+      "lane": "regras",
+      "col": 1,
+      "type": "lib",
+      "label": "lib/leads/eventos-do-funil/registrar.ts",
+      "sublabel": "valida no cadastro, repete por event_id e por negócio, grava, aplica estado e valor, move"
+    },
+    {
+      "id": "movimento",
+      "lane": "regras",
+      "col": 2,
+      "type": "lib",
+      "label": "decisao-de-movimento.ts",
+      "sublabel": "nunca retrocede; respeita a mão da equipe; etapa arquivada só registra"
+    },
+    {
+      "id": "confianca",
+      "lane": "regras",
+      "col": 3,
+      "type": "lib",
+      "label": "travaDoNavegador",
+      "sublabel": "ganho só após evento de estado; navegador nunca leva a perda"
+    },
+    {
+      "id": "identificar",
+      "lane": "regras",
+      "col": 4,
+      "type": "lib",
+      "label": "lib/tracker/identificar-pedido.ts",
+      "sublabel": "idtrack = contato; pedido aberto mais recente no funil da chave"
+    },
+    {
+      "id": "cadastro",
+      "lane": "dados",
+      "col": 1,
+      "type": "table",
+      "label": "crm_pipeline_events",
+      "sublabel": "o que o funil aceita e para onde o card vai"
+    },
+    {
+      "id": "chaves",
+      "lane": "dados",
+      "col": 2,
+      "type": "table",
+      "label": "crm_tracker_public_keys",
+      "sublabel": "chave pública, origens, revogação"
+    },
+    {
+      "id": "historico",
+      "lane": "dados",
+      "col": 3,
+      "type": "table",
+      "label": "crm_lead_activities",
+      "sublabel": "external_event: a verdade; origem e chave_id"
+    },
+    {
+      "id": "pedido",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "crm_leads",
+      "sublabel": "etapa, value_cents, custom_fields (cart, checkout, pedido)"
+    },
+    {
+      "id": "fonte",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "webhook_sources",
+      "sublabel": "value_path, value_unit, payload_state_key"
+    },
+    {
+      "id": "tela_eventos",
+      "lane": "tela",
+      "col": 1,
+      "type": "frontend",
+      "label": "Funis › Para onde o card vai em cada evento",
+      "sublabel": "cadastro, avisos, sinais de uso"
+    },
+    {
+      "id": "tela_rastreador",
+      "lane": "tela",
+      "col": 2,
+      "type": "frontend",
+      "label": "Funis › Rastreador para o site",
+      "sublabel": "cria chave, copia o código, vê o uso, revoga"
+    },
+    {
+      "id": "tela_fonte",
+      "lane": "tela",
+      "col": 3,
+      "type": "frontend",
+      "label": "Webhooks › Valor e itens do pedido",
+      "sublabel": "campo do valor, unidade, onde guardar o JSON"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "cardapio_servidor",
+      "to": "mcp",
+      "label": "tools/call com Bearer dsk_"
+    },
+    {
+      "id": "e2",
+      "from": "cardapio_site",
+      "to": "script",
+      "label": "rastreador('track', evento, dados)"
+    },
+    {
+      "id": "e3",
+      "from": "script",
+      "to": "coleta",
+      "label": "lote text/plain, sem preflight"
+    },
+    {
+      "id": "e4",
+      "from": "plataforma",
+      "to": "webhook",
+      "label": "POST do pedido finalizado"
+    },
+    {
+      "id": "e5",
+      "from": "mcp",
+      "to": "registrar",
+      "label": "crm_track_event"
+    },
+    {
+      "id": "e6",
+      "from": "coleta",
+      "to": "identificar",
+      "label": "idtrack → pedido"
+    },
+    {
+      "id": "e7",
+      "from": "coleta",
+      "to": "chaves",
+      "label": "a chave dá organização e funil"
+    },
+    {
+      "id": "e8",
+      "from": "identificar",
+      "to": "registrar",
+      "label": "pedido + origem navegador"
+    },
+    {
+      "id": "e9",
+      "from": "registrar",
+      "to": "cadastro",
+      "label": "evento cadastrado e ativo?"
+    },
+    {
+      "id": "e10",
+      "from": "registrar",
+      "to": "confianca",
+      "label": "só se vier do navegador"
+    },
+    {
+      "id": "e11",
+      "from": "confianca",
+      "to": "movimento",
+      "label": "libera ou barra o movimento"
+    },
+    {
+      "id": "e12",
+      "from": "registrar",
+      "to": "movimento",
+      "label": "decide a etapa"
+    },
+    {
+      "id": "e13",
+      "from": "registrar",
+      "to": "historico",
+      "label": "grava o fato"
+    },
+    {
+      "id": "e14",
+      "from": "registrar",
+      "to": "pedido",
+      "label": "estado, valor e etapa"
+    },
+    {
+      "id": "e15",
+      "from": "webhook",
+      "to": "fonte",
+      "label": "lê valor e JSON a aplicar"
+    },
+    {
+      "id": "e16",
+      "from": "webhook",
+      "to": "pedido",
+      "label": "cria ou atualiza o card"
+    },
+    {
+      "id": "e17",
+      "from": "tela_eventos",
+      "to": "cadastro",
+      "label": "cria, edita, desativa"
+    },
+    {
+      "id": "e18",
+      "from": "historico",
+      "to": "tela_eventos",
+      "label": "último recebimento e 7 dias"
+    },
+    {
+      "id": "e19",
+      "from": "tela_rastreador",
+      "to": "chaves",
+      "label": "cria e revoga"
+    },
+    {
+      "id": "e20",
+      "from": "historico",
+      "to": "tela_rastreador",
+      "label": "uso de cada chave"
+    },
+    {
+      "id": "e21",
+      "from": "tela_fonte",
+      "to": "fonte",
+      "label": "PATCH da fonte"
+    },
+    {
+      "id": "e22",
+      "from": "cadastro",
+      "to": "tela_rastreador",
+      "label": "o rastreador só conta o que está cadastrado"
+    }
+  ],
+  "cards": [
+    {
+      "titulo": "Por que o histórico é a verdade",
+      "texto": "O fato entra em crm_lead_activities (external_event) com a hora em que aconteceu. custom_fields e value_cents são projeção dele: se divergirem, vale o histórico. Reenviar o mesmo event_id não duplica, e o índice único do banco decide a corrida."
+    },
+    {
+      "titulo": "Por que a chave do rastreador vai no caminho",
+      "texto": "O preflight de CORS não tem corpo nem o cabeçalho certo: precisa saber de qual chave se trata para decidir a origem. A organização e o funil saem só da linha da chave, nunca do corpo."
+    },
+    {
+      "titulo": "O que o navegador não pode",
+      "texto": "Origin não é autenticação. Por isso, evento do navegador só fecha o pedido depois de um evento de estado, nunca leva a perda, e a resposta é sempre a mesma. Quem conhece o idtrack e forja carrinho e compra fecha o pedido daquele cliente: para valor definitivo e cancelamento vale o servidor."
+    },
+    {
+      "titulo": "A mesma compra pelas duas portas",
+      "texto": "O rastreador reconhece a repetição por order_id; o webhook, por external_id. Uma porta não enxerga a outra: a mesma compra pelas duas pode virar dois cards. Escolha uma porta para a compra."
+    }
+  ]
+}

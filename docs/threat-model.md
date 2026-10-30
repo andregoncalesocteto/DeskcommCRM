@@ -37,6 +37,7 @@ São conclusões de leitura de código.
 | `/api/v1/webhooks/waha/:token` | HMAC-SHA512 + `timingSafeEqual` (`lib/waha/ingest.ts`) | ❌ |
 | `/api/v1/webhooks/waha` (global, sem token) | só rede interna: requisição com marca de proxy de borda recebe 404 (`chegouPelaBorda`, `lib/http/ip-do-cliente.ts` — régua de cabeçalho, válida nos proxies do kit: Caddy, Traefik, Nginx Proxy Manager, túnel da Cloudflare); depois, o mesmo HMAC. Com a porta do app publicada direto, a camada que vale é a assinatura do remetente (`/admin/sistema`) | ❌ |
 | `/api/v1/webhooks/in/:token` | path token + assinatura opcional | ✅ 60/min por token |
+| `/api/v1/coleta/:chave` | **chave pública no caminho** (identificador, não segredo) + lista de origens da chave + travas de confiança do navegador (`lib/tracker/`, `registrar.ts`) | ✅ 60/min por visitante e chave; 1.200/min por chave (`checkRateLimit`) |
 | `/api/v1/webhooks/nuvemshop/*` | HMAC | ❌ |
 | `/api/v1/webhooks/cobranca/:provedor` | Stripe: `Stripe-Signature` (HMAC com horário). Asaas: token estático em `asaas-access-token` (sha256 + `timingSafeEqual`); o corpo é só ponteiro e a decisão vem da releitura. Token vazado: o dono gera outro em Admin › Cobrança › Conexão, "Testar e conectar" de novo | ✅ recusas 120/min por IP; Asaas, avisos válidos de cliente desconhecido 120/min por provedor, chave global (acima, 200 sem gravar) |
 | `/api/v1/cron/*` (9 rotas) | `Bearer INTERNAL_CRON_SECRET\|INTERNAL_SECRET`, **fail-closed** | ❌ |
@@ -69,6 +70,26 @@ saída; vazá-lo permite publicar rotas no túnel da conta, e por isso ele nunca
 log nem em query string.
 
 ---
+
+### 1.2 A porta pública do rastreador (`/api/v1/coleta/:chave`)
+
+Adicionada com a feature "Eventos do funil" (etapa 2). Um script no navegador do cliente final manda eventos sem token
+secreto; o que a prende ao site do cliente é a **lista de origens** da chave. Leia como superfície **de baixa autoridade e
+de entrada barata**:
+
+- **A chave é pública por desenho** (vai no HTML da página). Revogar desativa na hora (`crm_tracker_public_keys`).
+- **`Origin` não é autenticação.** O navegador o impõe; um cliente que não é navegador (curl, script) o escreve como quiser.
+  A porta recusa requisição sem `Origin` ou com origem fora da lista, mas **quem forja o cabeçalho passa**. Por isso a
+  segurança não pode depender dele sozinho.
+- **O que limita o estrago:** (1) o evento só vale para um contato cujo UUID (`idtrack`) o atacante já conheça e que tenha
+  um **pedido aberto no funil da chave**; (2) só aceita eventos **cadastrados** no funil; (3) evento do navegador só **fecha**
+  o pedido se ele já registrou um evento de estado antes, e **nunca** o move para perda; (4) a resposta tem sempre a mesma
+  forma (não revela se o `idtrack`/pedido existe); (5) limite de taxa por visitante+chave e por chave; (6) tudo é gravado com
+  `origem = navegador` e a `chave_id`, para rastrear e podar.
+- **Resíduo aceito e documentado:** quem conhece o `idtrack` de um cliente e forja carrinho **e** compra consegue **fechar o pedido
+  dele** com o valor que escolher. Para valor definitivo e cancelamento, a fonte de verdade é o servidor com token.
+- **A régua do IP do limite** depende de `ipDoCliente` (mesma ressalva da seção 1.1 e do T1/T2: contador em memória sem Redis).
+- **Desenho e provas:** `docs/design/eventos-do-funil.md` (seção "Etapas 2 e 3"), `tests/e2e/rastreador-do-cardapio.spec.ts`.
 
 ## 2. Riscos por ordem de exploração
 

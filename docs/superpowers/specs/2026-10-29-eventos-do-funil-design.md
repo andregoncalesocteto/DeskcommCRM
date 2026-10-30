@@ -2,7 +2,7 @@
 
 **Data:** 29/10/2026 · **Status:** proposta. Debate fechado com o autor; falta aprovação deste texto.
 **Escopo deste documento:** etapa 1 de 3 (núcleo: tabela, tela e operação no MCP).
-As etapas 2 (porta pública e plugin para o navegador) e 3 (valor e JSON no webhook de entrada) vêm depois e só usam o que a etapa 1 entrega.
+As etapas 2 (porta pública e plugin para o navegador) e 3 (valor e JSON no webhook de entrada) vêm depois e só usam o que a etapa 1 entrega (foram feitas: ver `docs/design/eventos-do-funil.md`, "Etapas 2 e 3: como ficaram").
 
 ## Problema
 

@@ -1,0 +1,2263 @@
+{
+  "feature": "eventos-do-funil-rastreador",
+  "generatedFrom": {
+    "prd": "docs/ralph/prd.json",
+    "prdMarkdown": "docs/ralph/prds/prd-eventos-do-funil.md",
+    "design": [
+      "docs/design/eventos-do-funil.md",
+      "docs/superpowers/specs/2026-10-29-eventos-do-funil-design.md"
+    ],
+    "prototype": null,
+    "adrs": [
+      "ADR-0007",
+      "ADR-0008",
+      "ADR-0009"
+    ],
+    "guides": [
+      "docs/integracao/rastreador-do-cardapio.md",
+      "docs/integracao/webhook-ou-rastreador.md"
+    ]
+  },
+  "etapa": "Etapa 2 · Rastreador (US-020 a US-030)",
+  "ambientePadrao": [
+    {
+      "titulo": "Pré-requisito",
+      "itens": [
+        "A Etapa 1 (Núcleo) está aprovada: o funil «Pedidos Bella» existe na organização A, com as etapas Conversas · Chamar humano · Visitou o cardápio · Viu um item · Carrinho · Revisão · Compras (ganho) · Cancelado (perda), e os 5 eventos de referência cadastrados à mão (page_view, view_item, cart_sync, begin_checkout, purchase; purchase com campo do valor value em reais, chave de repetição order_id e «respeitar movimento manual» desligado).",
+        "Usuários da organização A: gerente@teste.local, atendente@teste.local, leitor@teste.local. Da B: gerente-b@teste.local. {CRM} é o endereço do app (ex.: http://localhost:3000).",
+        "Contato «Cliente Teste 01» com pedido aberto em Conversas no funil «Pedidos Bella». Anotar o id do CONTATO (é ele o idtrack) e o id do pedido. Daqui em diante: ID_C1 (contato) e L1 (pedido). Para cada cenário que pedir «um cliente novo», criar outro contato com pedido aberto em Conversas."
+      ]
+    },
+    {
+      "titulo": "A chave do rastreador",
+      "itens": [
+        "Criar uma chave pela tela (CT-028.1) com o nome «Cardápio Teste» e os sites http://localhost:5555 e http://localhost:3000. Anotar o valor pk_… como CHAVE. Cenários que usam outra chave dizem qual."
+      ]
+    },
+    {
+      "titulo": "O site de teste (outra origem)",
+      "itens": [
+        "Criar uma pasta com o arquivo cardapio-teste.html e servi-la na porta 5555 (cd pasta && python3 -m http.server 5555). A porta 5555 é uma origem diferente da do CRM, de propósito.",
+        "Conteúdo do arquivo: uma página com <head> contendo, no lugar indicado, o código copiado da tela (CT-028.1), e no <body> cinco botões que chamam: rastreador('track','page_view',{screen_name:'home'}) · rastreador('track','view_item',{item_id:'pizza-1',item_name:'Pizza grande',price:59.9}) · rastreador('track','cart_sync',{items:[{item_id:'pizza-1',item_name:'Pizza grande',price:59.9,quantity:1}]}) · rastreador('track','begin_checkout',{value:73.9,item_count:1,delivery_type:'delivery'}) · rastreador('track','purchase',{order_id:'P-1042',value:73.9,payment_method:'pix'}).",
+        "Abrir sempre como http://localhost:5555/cardapio-teste.html?idtrack=<ID_C1>, com as Ferramentas do Desenvolvedor abertas nas abas Console, Network e Application."
+      ]
+    },
+    {
+      "titulo": "Como chamar a porta pública e a API",
+      "itens": [
+        "Porta pública: POST {CRM}/api/v1/coleta/<CHAVE>, sem login, corpo {\"idtrack\":\"<uuid do contato>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\",\"data\":{...}}]}. Pelo Postman/curl, enviar também o cabeçalho Origin quando o cenário pedir.",
+        "API de chaves: rotas /api/v1/pipelines/{id}/tracker-keys, com o cookie de sessão do gerente (copiar do navegador: DevTools › Application › Cookies).",
+        "Como conferir o resultado: card do pedido (etapa, valor, campos) e linha do tempo; ou GET /api/v1/leads/{id}. Banco, quando o cenário pedir: tabela crm_lead_activities (campo payload)."
+      ]
+    }
+  ],
+  "lastRun": {
+    "executedBy": null,
+    "executedAt": null,
+    "environment": null,
+    "build": null,
+    "summary": {
+      "pass": 0,
+      "fail": 0,
+      "blocked": 0,
+      "skipped": 0,
+      "pending": 67
+    }
+  },
+  "scenarios": [
+    {
+      "id": "CT-020.1",
+      "storyId": "US-020",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A chave decide organização e funil; o corpo não",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Segundo funil «Agenda» na organização A, com um pedido aberto do mesmo contato ID_C1 (L2) e o evento page_view cadastrado",
+        "CHAVE pertence ao funil «Pedidos Bella»"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\",\"pipeline_id\":\"<id do funil Agenda>\",\"organization_id\":\"<id da org B>\"}]} (com pipeline_id e organization_id extras)",
+        "Olhar os pedidos L1 e L2"
+      ],
+      "expectedResult": [
+        "Nenhum evento é registrado em L2 nem na organização B",
+        "Ou a chamada é recusada por validação, ou o evento vai só para o funil da chave (L1)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-020.2",
+      "storyId": "US-020",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Gerente de outra organização não vê nem revoga chaves alheias",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "CHAVE criada na organização A",
+        "Sessão de gerente-b@teste.local"
+      ],
+      "steps": [
+        "Enviar GET /api/v1/pipelines/{id do funil da A}/tracker-keys como gerente da B",
+        "Enviar a revogação da chave da A como gerente da B"
+      ],
+      "expectedResult": [
+        "Nas duas chamadas: 404",
+        "A chave da A continua ativa (o código de instalação segue funcionando)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-021.1",
+      "storyId": "US-021",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Criar, listar e revogar a chave pela API",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessão de gerente@teste.local"
+      ],
+      "steps": [
+        "Enviar POST em /api/v1/pipelines/{id}/tracker-keys com {\"name\":\"Cardápio API\",\"allowed_origins\":[\"https://cardapio.minhaloja.com.br\"]}",
+        "Enviar GET da lista",
+        "Enviar a revogação dessa chave",
+        "Enviar GET da lista de novo",
+        "Conferir api_audit_log"
+      ],
+      "expectedResult": [
+        "O POST devolve a chave (pk_…)",
+        "O primeiro GET lista a chave como ativa",
+        "Depois da revogação a lista mostra a chave como revogada",
+        "api_audit_log tem uma linha para a criação e outra para a revogação"
+      ],
+      "automatable": true,
+      "notes": "Os nomes dos campos do corpo seguem o contrato da rota; se divergirem, o QA anota o corpo que funcionou.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-021.2",
+      "storyId": "US-021",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Sites permitidos: o que é aceito e o que é recusado",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Sessão de gerente@teste.local"
+      ],
+      "steps": [
+        "Criar chave com site https://cardapio.minhaloja.com.br",
+        "Criar chave com site http://localhost:3000",
+        "Criar chave com site http://cardapio.minhaloja.com.br (http fora do localhost)",
+        "Criar chave com site https://cardapio.minhaloja.com.br/menu (com caminho)",
+        "Criar chave com a lista de sites vazia",
+        "Criar chave com site «*»"
+      ],
+      "expectedResult": [
+        "Os dois primeiros são aceitos",
+        "Os quatro últimos são recusados por validação"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-021.3",
+      "storyId": "US-021",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Atendente e visualizador não gerenciam chaves",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessões de atendente@teste.local e leitor@teste.local"
+      ],
+      "steps": [
+        "Como atendente, enviar POST de criação",
+        "Como visualizador, enviar GET da lista",
+        "Sem cookie, enviar GET da lista"
+      ],
+      "expectedResult": [
+        "Atendente: 403 · visualizador: 403 · sem cookie: 401"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-021.4",
+      "storyId": "US-021",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A organização vem da sessão, não do corpo",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Sessão de gerente@teste.local"
+      ],
+      "steps": [
+        "Enviar POST de criação com organization_id da B no corpo",
+        "Listar as chaves como gerente-b@teste.local"
+      ],
+      "expectedResult": [
+        "A chave nunca aparece para a organização B"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.1",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Pré-checagem (OPTIONS) de origem permitida",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "CHAVE com o site http://localhost:5555 permitido"
+      ],
+      "steps": [
+        "Enviar OPTIONS {CRM}/api/v1/coleta/<CHAVE> com os cabeçalhos Origin: http://localhost:5555 e Access-Control-Request-Method: POST"
+      ],
+      "expectedResult": [
+        "Resposta 204 com Access-Control-Allow-Origin igual a http://localhost:5555 (nunca «*»)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.2",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Origem não permitida não recebe cabeçalhos de CORS",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "CHAVE com http://localhost:5555 permitido, mas não https://site-malvado.example"
+      ],
+      "steps": [
+        "Enviar OPTIONS à porta com Origin: https://site-malvado.example",
+        "Enviar POST com um evento válido e Origin: https://site-malvado.example",
+        "Olhar o pedido L1"
+      ],
+      "expectedResult": [
+        "Nenhuma das respostas traz Access-Control-Allow-Origin",
+        "O evento do POST não é registrado em L1"
+      ],
+      "automatable": true,
+      "notes": "Se o evento for registrado mesmo sem CORS, o QA reprova o cenário e anota.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.3",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Enviar eventos de origem permitida",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "CHAVE ativa; page_view cadastrado; L1 aberto em Conversas"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"11111111-1111-4111-8111-111111111111\",\"data\":{\"screen_name\":\"home\"}}]}",
+        "Abrir o card de L1"
+      ],
+      "expectedResult": [
+        "Resposta 200 com Access-Control-Allow-Origin: http://localhost:5555",
+        "L1 vai para «Visitou o cardápio» e a linha do tempo ganha o registro"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.4",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Chave revogada ou desconhecida é recusada",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Uma chave REVOGADA (REV) e o texto «pk_naoexiste»"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<REV> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}",
+        "Repetir com a chave pk_naoexiste"
+      ],
+      "expectedResult": [
+        "As duas respostas são de erro (sem sucesso)",
+        "L1 não muda e a linha do tempo não ganha registro",
+        "As respostas não trazem cabeçalhos de CORS"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.5",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Lote de 20 eventos passa, 21 e 0 não",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "CHAVE ativa; page_view cadastrado"
+      ],
+      "steps": [
+        "Enviar um lote com 20 eventos page_view (uuids diferentes)",
+        "Enviar um lote com 21 eventos",
+        "Enviar um lote com events vazio"
+      ],
+      "expectedResult": [
+        "20: aceito",
+        "21: recusado por validação, sem efeito",
+        "0: recusado por validação"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.6",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Corpo inválido é recusado",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "CHAVE ativa"
+      ],
+      "steps": [
+        "Enviar corpo que não é JSON (texto «abc»)",
+        "Enviar {\"events\":[]} sem idtrack",
+        "Enviar {\"idtrack\":\"<ID_C1>\",\"events\":\"page_view\"}",
+        "Enviar GET à mesma rota"
+      ],
+      "expectedResult": [
+        "Os três primeiros: erro de validação (4xx)",
+        "GET: método não permitido",
+        "Nenhum evento é registrado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-022.7",
+      "storyId": "US-022",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Evento não cadastrado no funil não tem efeito",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "CHAVE ativa; evento «cupom_xpto» NÃO cadastrado"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"cupom_xpto\",\"event_id\":\"<uuid>\"}]}",
+        "Olhar a linha do tempo de L1"
+      ],
+      "expectedResult": [
+        "Nenhum registro novo e nenhuma mudança de etapa em L1"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-023.1",
+      "storyId": "US-023",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Limite de taxa por visitante: 60 por minuto",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "desempenho",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "CHAVE ativa; um único IP de origem; nenhum envio no último minuto"
+      ],
+      "steps": [
+        "Enviar 60 chamadas em menos de 1 minuto (Postman Runner), cada uma com 1 evento page_view de event_id novo",
+        "Enviar a 61ª chamada"
+      ],
+      "expectedResult": [
+        "As 60 primeiras são aceitas",
+        "A 61ª recebe 429 com o cabeçalho Retry-After",
+        "A resposta 429 traz Access-Control-Allow-Origin da origem permitida"
+      ],
+      "automatable": true,
+      "notes": "O guia fala em 60 por minuto por visitante e 1.200 por minuto por chave; este cenário confere o primeiro.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-023.2",
+      "storyId": "US-023",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A resposta tem a mesma forma para idtrack inexistente, sem pedido e válido",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "ID_SEM_PEDIDO: contato sem nenhum pedido aberto",
+        "Um UUID que não corresponde a nenhum contato (00000000-0000-4000-8000-000000000000)",
+        "ID_C1 com pedido aberto"
+      ],
+      "steps": [
+        "Enviar a mesma chamada (mesmo event_id «e-1» de page_view) com cada um dos três idtrack",
+        "Comparar status e corpo das três respostas"
+      ],
+      "expectedResult": [
+        "Os três status são iguais",
+        "Os três corpos são idênticos",
+        "Nada na resposta mostra se o contato ou o pedido existe"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-023.3",
+      "storyId": "US-023",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A resposta nunca traz dado pessoal nem de funil",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "ID_C1 com telefone e nome cadastrados"
+      ],
+      "steps": [
+        "Enviar um page_view válido para ID_C1",
+        "Ler o corpo inteiro da resposta"
+      ],
+      "expectedResult": [
+        "O corpo não contém o nome, o telefone nem o e-mail do contato",
+        "O corpo não contém etapa, valor nem ids de pedido"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.1",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "UUID de contato com pedido aberto registra no pedido",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "ID_C1 com L1 aberto no funil da chave"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}"
+      ],
+      "expectedResult": [
+        "O registro aparece na linha do tempo de L1"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.2",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Contato sem pedido aberto: nada é criado",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Contato ID_SEM_PEDIDO sem pedido aberto; contar os pedidos da organização antes"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_SEM_PEDIDO>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}",
+        "Contar os pedidos da organização de novo"
+      ],
+      "expectedResult": [
+        "A quantidade de pedidos não muda",
+        "Nenhuma atividade nova aparece para esse contato"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.3",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Telefone no lugar do idtrack é descartado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 aberto; telefone do contato 5511900000001"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"5511900000001\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}",
+        "Repetir com idtrack «abc» e com um UUID com um caractere a menos"
+      ],
+      "expectedResult": [
+        "As três chamadas não têm efeito em L1",
+        "As respostas não explicam o motivo do descarte"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.4",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Contato pessoal é descartado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Contato pessoal com pedido aberto"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID do contato pessoal>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}"
+      ],
+      "expectedResult": [
+        "Nada é registrado no pedido desse contato"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.5",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Com vários pedidos abertos, vale o mais recente",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Contato com 2 pedidos abertos no funil da chave: o mais antigo (LA) e o criado depois (LB)"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID do contato>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}"
+      ],
+      "expectedResult": [
+        "O registro aparece em LB",
+        "LA não ganha nada"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.6",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Pedido aberto só em outro funil: descartado",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Contato cujo único pedido aberto está no funil «Agenda»"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID desse contato>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}"
+      ],
+      "expectedResult": [
+        "Nenhum registro no pedido do funil «Agenda»",
+        "Nenhum pedido novo no funil «Pedidos Bella»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-024.7",
+      "storyId": "US-024",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "idtrack de um contato de outra organização é descartado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Contato da organização B com pedido aberto (ID_B)"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_B>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]} usando a CHAVE da organização A"
+      ],
+      "expectedResult": [
+        "Nada é registrado na organização B",
+        "A resposta é igual à de um idtrack inexistente"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.1",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Todo evento do navegador é marcado com a origem",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "CHAVE ativa; L1 aberto"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"<uuid>\"}]}",
+        "Consultar a atividade criada: select payload from crm_lead_activities where lead_id = '<L1>' order by created_at desc limit 1"
+      ],
+      "expectedResult": [
+        "O payload da atividade contém origem «navegador»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.2",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Compra do navegador sem estado antes não fecha o pedido",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 em Conversas, sem nenhum cart_sync nem begin_checkout"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"purchase\",\"event_id\":\"<uuid>\",\"data\":{\"order_id\":\"PED-N1\",\"value\":73.9}}]}",
+        "Abrir o card de L1"
+      ],
+      "expectedResult": [
+        "O card continua em Conversas, sem valor",
+        "A compra aparece registrada na linha do tempo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.3",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Só visitar a página não conta como estado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 em Conversas",
+        "Cadastro ajustado só para este cenário: view_item SEM «guardar em» (page_view também não guarda nada); nenhum cart_sync nem begin_checkout enviado",
+        "Enviados antes, pela porta, apenas um page_view e um view_item"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"purchase\",\"event_id\":\"<uuid>\",\"data\":{\"order_id\":\"PED-N2\",\"value\":50}}]}"
+      ],
+      "expectedResult": [
+        "A compra fica só registrada e o card não vai a Compras"
+      ],
+      "automatable": true,
+      "notes": "A trava olha eventos de estado (os que guardam conteúdo); por isso o cadastro é ajustado na pré-condição.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.4",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Compra do navegador depois de um carrinho fecha o pedido",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 em Conversas"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"cart_sync\",\"event_id\":\"<uuid1>\",\"data\":{\"items\":[{\"item_id\":\"pizza-1\",\"quantity\":1}]}}]}",
+        "Enviar begin_checkout com value 73.9",
+        "Enviar purchase com order_id PED-OK e value 73.9"
+      ],
+      "expectedResult": [
+        "O card termina em Compras, ganho, com R$ 73,90"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.5",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Mesma compra com outro event_id é repetição",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 já fechado por um purchase com order_id PED-OK"
+      ],
+      "steps": [
+        "Enviar purchase com order_id PED-OK e event_id novo",
+        "Olhar a linha do tempo"
+      ],
+      "expectedResult": [
+        "Não aparece segunda compra",
+        "Valor e etapa do card não mudam"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.6",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-12"
+      ],
+      "title": "Pedido encerrado não é alterado pelo navegador",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 fechado em Compras com R$ 73,90"
+      ],
+      "steps": [
+        "Enviar cart_sync com itens diferentes e begin_checkout com value 5 pela porta",
+        "Olhar o card"
+      ],
+      "expectedResult": [
+        "Etapa, valor (R$ 73,90) e carrinho do card não mudam",
+        "Nenhum pedido novo é criado"
+      ],
+      "automatable": true,
+      "notes": "Se o idtrack só enxerga pedido ABERTO, o evento é simplesmente descartado; o QA anota se ele ficou ou não na linha do tempo. Ver coverage.blockedByOpenQuestions.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.7",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-22"
+      ],
+      "title": "Cancelamento não existe na porta pública",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "L1 em Carrinho",
+        "Evento «cancelou» NÃO cadastrado"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"cancelou\",\"event_id\":\"<uuid>\",\"data\":{\"order_id\":\"PED-C\"}}]}"
+      ],
+      "expectedResult": [
+        "L1 continua em Carrinho, aberto",
+        "Nenhuma mudança de etapa para Cancelado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-025.8",
+      "storyId": "US-025",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Compra com valor inválido pelo navegador não grava nada",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "L1 em Revisão (com carrinho já gravado)"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/coleta/<CHAVE> com o cabeçalho Origin: http://localhost:5555 e o corpo {\"idtrack\":\"<ID_C1>\",\"events\":[{\"event\":\"purchase\",\"event_id\":\"<uuid>\",\"data\":{\"order_id\":\"PED-NEG\",\"value\":-10}}]}"
+      ],
+      "expectedResult": [
+        "L1 continua em Revisão e sem valor novo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.1",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "O script é um arquivo estático sem dependências",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "App no ar"
+      ],
+      "steps": [
+        "Abrir {CRM}/rastreador.js no navegador",
+        "Abrir cardapio-teste.html?idtrack=<ID_C1> com a aba Network aberta e recarregar"
+      ],
+      "expectedResult": [
+        "O arquivo abre como JavaScript (status 200)",
+        "Na aba Network, só aparecem pedidos ao {CRM} e à própria página (nenhum domínio de terceiros)",
+        "O Console não mostra erro"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.2",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Eventos rápidos viajam juntos em um lote",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste aberta com ?idtrack=<ID_C1>; aba Network filtrada por «coleta»"
+      ],
+      "steps": [
+        "Clicar nos cinco botões, um depois do outro, em menos de 3 segundos",
+        "Esperar 4 segundos"
+      ],
+      "expectedResult": [
+        "Aparece UMA só requisição POST para /api/v1/coleta/<CHAVE>",
+        "O corpo dessa requisição tem 5 eventos, cada um com event_id (UUID)"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.3",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Lote de no máximo 20 eventos",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Página de teste aberta; Console aberto"
+      ],
+      "steps": [
+        "No Console, executar: for (let i=0;i<25;i++) rastreador('track','page_view',{screen_name:'t'+i})",
+        "Esperar 8 segundos olhando a aba Network"
+      ],
+      "expectedResult": [
+        "Aparecem requisições à porta com no máximo 20 eventos cada (20 + 5, ou equivalente)",
+        "Nenhum evento é enviado duas vezes"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.4",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Evento enviado ao sair da página",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Página de teste aberta"
+      ],
+      "steps": [
+        "Clicar no botão «Ver item» e, em menos de 1 segundo, fechar a aba",
+        "Abrir o card de L1 e olhar a linha do tempo"
+      ],
+      "expectedResult": [
+        "O view_item aparece registrado em L1 mesmo sem esperar os 3 segundos"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.5",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Falha de rede: o evento é reenviado com o mesmo event_id",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": "Controle e liberdade do usuário",
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste aberta; Network aberta"
+      ],
+      "steps": [
+        "Em Network, marcar «Offline»",
+        "Clicar em «Ver item»",
+        "Esperar 5 segundos, desmarcar «Offline» e esperar 10 segundos"
+      ],
+      "expectedResult": [
+        "O evento é reenviado quando a rede volta",
+        "O event_id da nova tentativa é o mesmo da primeira",
+        "L1 tem um só registro desse view_item"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.6",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "CRM fora do ar: reenvia só em falha de servidor",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Página de teste aberta"
+      ],
+      "steps": [
+        "Parar o app do CRM (por exemplo docker stop do serviço app)",
+        "Clicar em «Ver item»",
+        "Esperar 10 segundos e subir o app de novo",
+        "Esperar mais 20 segundos"
+      ],
+      "expectedResult": [
+        "Durante a queda, o script faz novas tentativas espaçadas",
+        "Depois que o CRM volta, o evento é entregue uma vez",
+        "A página do cardápio continua funcionando o tempo todo"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.7",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Evento recusado não é reenviado",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento «cupom_xpto» não cadastrado; página de teste aberta com debug ligado"
+      ],
+      "steps": [
+        "No Console, executar rastreador('track','cupom_xpto',{})",
+        "Esperar 15 segundos olhando a aba Network"
+      ],
+      "expectedResult": [
+        "Há exatamente uma requisição com esse evento",
+        "Não aparecem novas tentativas"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.8",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Erros do script nunca quebram a página",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste aberta"
+      ],
+      "steps": [
+        "No Console, executar rastreador('track')",
+        "Executar rastreador('track', null, undefined)",
+        "Executar const o={}; o.o=o; rastreador('track','view_item',o)",
+        "Clicar nos botões da página"
+      ],
+      "expectedResult": [
+        "O Console não mostra erro sem tratamento (Uncaught)",
+        "Os botões da página continuam funcionando"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.9",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "O script não observa a página sozinho",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Página de teste aberta; Network filtrada por «coleta»"
+      ],
+      "steps": [
+        "No Console, executar window.dataLayer = window.dataLayer || []; dataLayer.push({event:'purchase'})",
+        "Adicionar a um botão da página o atributo data-evento=\"purchase\" e clicar nele",
+        "Esperar 5 segundos"
+      ],
+      "expectedResult": [
+        "Nenhuma requisição à porta é feita"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-026.10",
+      "storyId": "US-026",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Chave inexistente ou revogada não quebra a página",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Página de teste com a chave trocada por pk_naoexiste"
+      ],
+      "steps": [
+        "Abrir a página com ?idtrack=<ID_C1>",
+        "Clicar em «Ver item»",
+        "Esperar 30 segundos olhando o Console"
+      ],
+      "expectedResult": [
+        "A página funciona normalmente",
+        "O script desiste depois de poucas tentativas (no máximo 5, com espera crescente)",
+        "Nada é registrado no CRM"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.1",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-20",
+        "FR-24"
+      ],
+      "title": "idtrack válido: envia e guarda na sessão do navegador",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste; aba Application aberta"
+      ],
+      "steps": [
+        "Abrir cardapio-teste.html?idtrack=<ID_C1>",
+        "Em Application › Session Storage, olhar a origem http://localhost:5555",
+        "Clicar em «Ver item»"
+      ],
+      "expectedResult": [
+        "Há uma entrada na sessão guardando o idtrack",
+        "O view_item chega ao CRM (linha do tempo de L1)"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.2",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Páginas seguintes da mesma aba continuam enviando",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Passo anterior feito (idtrack guardado)"
+      ],
+      "steps": [
+        "Na mesma aba, abrir http://localhost:5555/cardapio-teste.html (sem ?idtrack)",
+        "Clicar em «Ver item»"
+      ],
+      "expectedResult": [
+        "O evento é enviado usando o idtrack da sessão"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.3",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Sem idtrack: nada é enviado nem guardado",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Aba nova, sem nada em Session Storage"
+      ],
+      "steps": [
+        "Abrir http://localhost:5555/cardapio-teste.html sem ?idtrack",
+        "Clicar em todos os botões",
+        "Esperar 5 segundos"
+      ],
+      "expectedResult": [
+        "Nenhuma requisição à porta",
+        "Nada é guardado em Session Storage nem Local Storage"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.4",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "idtrack que não é UUID é ignorado",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Aba nova"
+      ],
+      "steps": [
+        "Abrir …/cardapio-teste.html?idtrack=11999999999 e clicar nos botões",
+        "Repetir com ?idtrack=abc",
+        "Repetir com ?idtrack=joao@email.com"
+      ],
+      "expectedResult": [
+        "Nas três tentativas: nenhuma requisição e nada guardado"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.5",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-24"
+      ],
+      "title": "storage:false: nada fica no navegador",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste com o código de instalação alterado para incluir storage:false na inicialização"
+      ],
+      "steps": [
+        "Abrir …/cardapio-teste.html?idtrack=<ID_C1>",
+        "Clicar em «Ver item»",
+        "Olhar Session Storage, Local Storage e Cookies"
+      ],
+      "expectedResult": [
+        "O evento chega ao CRM",
+        "Não há nenhuma entrada do rastreador em Session Storage, Local Storage ou Cookies"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.6",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-24"
+      ],
+      "title": "optOut apaga o que foi guardado e para o envio",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Controle e liberdade do usuário",
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste aberta com ?idtrack=<ID_C1> e idtrack já guardado"
+      ],
+      "steps": [
+        "No Console, executar rastreador('optOut')",
+        "Olhar Session Storage e Local Storage",
+        "Clicar em «Ver item»",
+        "Recarregar a página (com o ?idtrack ainda na URL) e clicar em «Ver item»"
+      ],
+      "expectedResult": [
+        "O idtrack some da sessão",
+        "Aparece o marcador rastreador_optout em Local Storage",
+        "Nenhuma requisição à porta, nem depois de recarregar"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.7",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-24"
+      ],
+      "title": "optIn volta a enviar",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Estado do CT-027.6"
+      ],
+      "steps": [
+        "No Console, executar rastreador('optIn')",
+        "Recarregar com ?idtrack=<ID_C1>",
+        "Clicar em «Ver item»"
+      ],
+      "expectedResult": [
+        "O evento é enviado e registrado em L1"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.8",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-23"
+      ],
+      "title": "Modo de depuração avisa que o evento não está cadastrado",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Ajuda para reconhecer e recuperar de erros",
+      "priority": "media",
+      "preconditions": [
+        "Página de teste com debug:true na inicialização; evento «cupom_xpto» não cadastrado"
+      ],
+      "steps": [
+        "No Console, executar rastreador('track','cupom_xpto',{})",
+        "Esperar 5 segundos",
+        "Repetir com o debug desligado"
+      ],
+      "expectedResult": [
+        "Com debug ligado, o Console avisa que o evento «cupom_xpto» não está cadastrado e lista os cadastrados",
+        "Com debug desligado, o Console fica em silêncio"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.9",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-24"
+      ],
+      "title": "O script nunca envia telefone, e-mail nem nome",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste aberta com ?idtrack=<ID_C1>; Network aberta"
+      ],
+      "steps": [
+        "No Console, executar rastreador('track','view_item',{item_id:'pizza-1',item_name:'Pizza grande',phone:'11999999999',email:'a@b.com',nome:'Maria',cpf:'123',contato:{telefone:'11988887777'},obs:'fale com ana@exemplo.com'})",
+        "Esperar 5 segundos e abrir o corpo da requisição na aba Network"
+      ],
+      "expectedResult": [
+        "O corpo enviado NÃO contém phone, email, nome, cpf nem contato.telefone",
+        "O valor com cara de e-mail (ana@exemplo.com) também não aparece",
+        "item_name «Pizza grande» continua no corpo"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-027.10",
+      "storyId": "US-027",
+      "requirements": [
+        "FR-24"
+      ],
+      "title": "O script não cria cookies",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Página de teste aberta com ?idtrack=<ID_C1>"
+      ],
+      "steps": [
+        "Clicar em todos os botões",
+        "Em Application › Cookies, olhar http://localhost:5555"
+      ],
+      "expectedResult": [
+        "O rastreador não cria nenhum cookie"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.1",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Criar a chave e copiar o código de instalação",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Logado como gerente@teste.local; funil «Pedidos Bella» sem chave"
+      ],
+      "steps": [
+        "Abrir Configurações › Funis e o funil «Pedidos Bella»",
+        "Achar a seção «Rastreador para o site do cardápio»",
+        "Clicar em «Criar chave do rastreador»",
+        "Preencher o nome com «Cardápio Teste» e, em sites, duas linhas: http://localhost:5555 e http://localhost:3000",
+        "Confirmar",
+        "Clicar em «Copiar código de instalação» e colar o resultado num editor de texto"
+      ],
+      "expectedResult": [
+        "A chave aparece na lista com o nome e os dois sites",
+        "O texto colado traz a chave pk_… e o endereço do CRM",
+        "O código é um trecho para colar no <head> da página"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.2",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Sites inválidos são recusados com mensagem clara",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Ajuda para reconhecer e recuperar de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Formulário de criação de chave aberto"
+      ],
+      "steps": [
+        "Informar o site cardapio.minhaloja.com.br (sem https) e confirmar",
+        "Trocar por http://cardapio.minhaloja.com.br e confirmar",
+        "Trocar por https://cardapio.minhaloja.com.br/menu e confirmar",
+        "Deixar o campo de sites vazio e confirmar"
+      ],
+      "expectedResult": [
+        "Nas quatro tentativas a chave NÃO é criada",
+        "Cada tentativa mostra uma mensagem em português explicando o formato esperado (https, sem nada depois do nome do site)"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.3",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A tela explica a chave em linguagem simples",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Correspondência entre o sistema e o mundo real",
+      "priority": "media",
+      "preconditions": [
+        "Seção do rastreador aberta"
+      ],
+      "steps": [
+        "Ler o texto da seção"
+      ],
+      "expectedResult": [
+        "O texto explica que a chave é pública, não é senha, e só permite enviar eventos dos sites listados",
+        "O texto diz que o cancelamento não passa por essa chave",
+        "Não há jargão técnico"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.4",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A tela mostra se a chave já recebeu evento",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Chave recém-criada, nunca usada"
+      ],
+      "steps": [
+        "Olhar a linha da chave",
+        "Abrir a página de teste e clicar em «Ver item» duas vezes",
+        "Recarregar a seção"
+      ],
+      "expectedResult": [
+        "Antes: «ainda não recebeu nada» (ou equivalente)",
+        "Depois: mostra a hora do último recebimento e a contagem dos últimos 7 dias"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.5",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Revogar a chave pela tela",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Controle e liberdade do usuário",
+      "priority": "alta",
+      "preconditions": [
+        "Chave ativa em uso na página de teste"
+      ],
+      "steps": [
+        "Clicar em revogar na linha da chave",
+        "Confirmar, se a tela pedir",
+        "Na página de teste, clicar em «Ver item»"
+      ],
+      "expectedResult": [
+        "A chave aparece como revogada",
+        "O envio da página de teste deixa de ter efeito no CRM"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.6",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "A seção não cria item novo no menu lateral",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "Olhar todos os itens do menu lateral antes e depois de abrir a seção"
+      ],
+      "expectedResult": [
+        "O menu não ganhou item novo; a seção só existe dentro de Configurações › Funis"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.7",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Duplo clique em «Criar chave» cria uma só",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "media",
+      "preconditions": [
+        "Formulário preenchido"
+      ],
+      "steps": [
+        "Dar dois cliques rápidos em criar",
+        "Olhar a lista de chaves"
+      ],
+      "expectedResult": [
+        "Existe uma só chave nova"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.8",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Nome da chave com HTML aparece como texto",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Chave criada com o nome «<img src=x onerror=alert(1)>»"
+      ],
+      "steps": [
+        "Olhar a lista de chaves"
+      ],
+      "expectedResult": [
+        "O texto aparece literalmente, sem executar nada"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.9",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Atendente e visualizador não gerenciam a chave",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessões de atendente@teste.local e leitor@teste.local"
+      ],
+      "steps": [
+        "Entrar como atendente e procurar a seção do rastreador",
+        "Repetir como visualizador"
+      ],
+      "expectedResult": [
+        "Não há como criar nem revogar chave (seção oculta, só leitura ou ação recusada com mensagem)"
+      ],
+      "automatable": false,
+      "notes": "Comportamento exato não está nos insumos; o QA anota o que viu.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-028.10",
+      "storyId": "US-028",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Celular e teclado",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "usabilidade",
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Janela em 375 px; depois voltar ao tamanho normal"
+      ],
+      "steps": [
+        "Abrir a seção e conferir se cabe sem rolagem horizontal",
+        "Voltar ao tamanho normal e criar uma chave só com Tab, digitação e Enter"
+      ],
+      "expectedResult": [
+        "Nada fica cortado em 375 px",
+        "A chave é criada sem usar o mouse e o foco é sempre visível"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-029.1",
+      "storyId": "US-029",
+      "requirements": [
+        "FR-21",
+        "FR-23"
+      ],
+      "title": "Jornada completa do cardápio até a compra",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Chave ativa; 5 eventos cadastrados; L1 em Conversas; página de teste servida em http://localhost:5555"
+      ],
+      "steps": [
+        "Abrir …/cardapio-teste.html?idtrack=<ID_C1>",
+        "Clicar em «Ver página», «Ver item», «Atualizar carrinho», «Revisar» e «Comprar», com uns 4 segundos entre cada clique",
+        "Abrir o card de L1 no CRM"
+      ],
+      "expectedResult": [
+        "O card chega a Compras, ganho, com R$ 73,90",
+        "Os dados do carrinho, da revisão e da compra estão guardados no card",
+        "A linha do tempo mostra os cinco eventos, marcados com origem navegador",
+        "Nenhum dado pessoal (telefone, e-mail, nome) aparece nos eventos"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-029.2",
+      "storyId": "US-029",
+      "requirements": [
+        "FR-8"
+      ],
+      "title": "Recarregar a página de sucesso não duplica a compra",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Estado final do CT-029.1"
+      ],
+      "steps": [
+        "Na página de teste, clicar em «Comprar» mais duas vezes",
+        "Esperar 5 segundos e olhar a linha do tempo e o valor"
+      ],
+      "expectedResult": [
+        "Continua uma só compra e R$ 73,90",
+        "Nenhum card novo é criado"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-029.3",
+      "storyId": "US-029",
+      "requirements": [
+        "FR-21"
+      ],
+      "title": "Comprar sem carrinho antes não fecha o pedido",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Cliente novo (ID_C2) com pedido aberto em Conversas"
+      ],
+      "steps": [
+        "Abrir …/cardapio-teste.html?idtrack=<ID_C2>",
+        "Clicar só em «Comprar»",
+        "Abrir o card"
+      ],
+      "expectedResult": [
+        "O card continua fora de Compras e sem valor",
+        "A compra aparece registrada na linha do tempo"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-029.4",
+      "storyId": "US-029",
+      "requirements": [
+        "FR-20"
+      ],
+      "title": "Link com telefone no idtrack não envia nada",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Cliente novo"
+      ],
+      "steps": [
+        "Abrir …/cardapio-teste.html?idtrack=11999999999",
+        "Clicar em todos os botões"
+      ],
+      "expectedResult": [
+        "Nenhuma requisição à porta e nenhum registro no CRM"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-029.5",
+      "storyId": "US-029",
+      "requirements": [
+        "FR-19"
+      ],
+      "title": "Mesmo código em um site que não está na lista",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Servir a mesma pasta também na porta 5556 (python3 -m http.server 5556); a chave só permite a porta 5555"
+      ],
+      "steps": [
+        "Abrir http://localhost:5556/cardapio-teste.html?idtrack=<ID_C1>",
+        "Clicar em «Ver item»",
+        "Olhar o Console e o card de L1"
+      ],
+      "expectedResult": [
+        "O navegador bloqueia a resposta por CORS (erro no Console)",
+        "O CRM não registra o evento em L1"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-029.6",
+      "storyId": "US-029",
+      "requirements": [
+        "FR-18"
+      ],
+      "title": "Chave revogada para na hora",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Página de teste funcionando"
+      ],
+      "steps": [
+        "Revogar a chave pela tela",
+        "Na mesma aba da página de teste, clicar em «Ver item»"
+      ],
+      "expectedResult": [
+        "O evento não chega ao CRM"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    }
+  ],
+  "coverage": {
+    "storiesWithoutScenarios": [
+      "US-030: Entrega documental (guia de instalação, nota de versão, conferência da LGPD), conferida por pnpm release:conferir e por revisão. O que o guia afirma sobre privacidade é testado nos CT-027.9 e CT-027.10."
+    ],
+    "requirementsWithoutScenarios": [],
+    "outOfScope": [
+      "Evento de cancelamento ou perda pelo navegador (CT-025.7 confere só que não existe).",
+      "Link assinado para identificar o cliente.",
+      "Observação automática por atributos HTML e leitura do dataLayer (CT-026.9 confere que não acontece).",
+      "Tabela de visitante anônimo e login do cardápio por telefone no script.",
+      "Celular real, outros navegadores e proxy/CDN que reescreva Origin (a evidência do mantenedor também não cobre)."
+    ],
+    "undocumentedBehaviour": [],
+    "blockedByOpenQuestions": [
+      "idtrack cujo único pedido está encerrado: a US-024 diz que o servidor acha o pedido ABERTO mais recente e descarta o resto; a US-025 diz que pedido encerrado «só registra o evento». O CT-025.6 só afirma que nada muda no pedido.",
+      "Pergunta 3 do PRD (chave pública em texto ou hash): decisão interna, não observável pelo QA.",
+      "Pergunta 4 do PRD (texto de consentimento revisado pela LGPD): revisão de texto jurídico, não executável como cenário."
+    ]
+  }
+}

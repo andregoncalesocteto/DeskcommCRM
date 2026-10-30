@@ -1,0 +1,3164 @@
+{
+  "feature": "eventos-do-funil-nucleo",
+  "generatedFrom": {
+    "prd": "docs/ralph/prd.json",
+    "prdMarkdown": "docs/ralph/prds/prd-eventos-do-funil.md",
+    "design": [
+      "docs/design/eventos-do-funil.md",
+      "docs/superpowers/specs/2026-10-29-eventos-do-funil-design.md"
+    ],
+    "prototype": null,
+    "adrs": [
+      "ADR-0007",
+      "ADR-0008",
+      "ADR-0009"
+    ],
+    "guides": [
+      "docs/integracao/rastreador-do-cardapio.md",
+      "docs/integracao/webhook-ou-rastreador.md"
+    ]
+  },
+  "etapa": "Etapa 1 · Núcleo (US-001 a US-019)",
+  "ambientePadrao": [
+    {
+      "titulo": "Ambiente",
+      "itens": [
+        "Stack local (ou homologação) com banco novo: baseline.sql aplicado + bootstrap-owner, sem variáveis opcionais (por exemplo sem RESEND_API_KEY). Daqui em diante {CRM} é o endereço do app, por exemplo http://localhost:3000.",
+        "Organização A «Loja Teste A» e organização B «Loja Teste B», cada uma com o seu dono.",
+        "Na organização A: gerente@teste.local (papel gerente), atendente@teste.local (papel atendente) e leitor@teste.local (papel visualizador). Na B: gerente-b@teste.local (gerente)."
+      ]
+    },
+    {
+      "titulo": "Funil de referência (organização A)",
+      "itens": [
+        "Funil «Pedidos Bella» com estas etapas, nesta ordem: 1 Conversas · 2 Chamar humano · 3 Visitou o cardápio · 4 Viu um item · 5 Carrinho · 6 Revisão · 7 Compras (ganho) · 8 Cancelado (perda).",
+        "Um campo declarado no funil: «Observação», chave observacao.",
+        "Contato «Cliente Teste 01» (telefone +55 11 90000-0001) com um pedido aberto na etapa Conversas do funil «Pedidos Bella». Anotar o id do pedido (lead_id) lendo-o na resposta de GET /api/v1/leads ou no endereço do card; daqui em diante L1. Quando um cenário pedir «um pedido novo», criar outro contato «Cliente Teste NN» com pedido aberto em Conversas e anotar o id."
+      ]
+    },
+    {
+      "titulo": "Eventos de referência (cadastro à mão, nada vem pronto)",
+      "itens": [
+        "Cadastrar na tela (Configurações › Funis › Etapas do funil › «Para onde o card vai em cada evento») ou pelo POST do CT-014.1, uma linha por evento: page_view «Visitou o cardápio» → destino Visitou o cardápio · view_item «Viu um item» → Viu um item, guardar em ultimo_item · cart_sync «Carrinho atualizado» → Carrinho, guardar em carrinho · begin_checkout «Revisou o pedido» → Revisão, guardar em revisao, campo do valor value em reais · purchase «Compra» → Compras, guardar em compra, campo do valor value em reais, chave de repetição order_id, respeitar movimento manual DESLIGADO.",
+        "Os outros ficam com «respeitar movimento manual» LIGADO (padrão). Os cenários que precisam de um evento a mais dizem qual nas pré-condições."
+      ]
+    },
+    {
+      "titulo": "Como chamar o MCP",
+      "itens": [
+        "Criar um token de API da organização A com os escopos de leitura e de escrita do MCP (aparece uma vez, começa com dsk_). Guardar como TOKEN_A; fazer o mesmo na B (TOKEN_B).",
+        "Chamada: POST {CRM}/api/mcp com os cabeçalhos Authorization: Bearer TOKEN_A, Content-Type: application/json e Accept: application/json, text/event-stream, e o corpo {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"<ferramenta>\",\"arguments\":{...}}}. Pode ser feita no Postman, no Insomnia ou no MCP Inspector."
+      ]
+    },
+    {
+      "titulo": "Como chamar a API do app (cadastro)",
+      "itens": [
+        "As rotas /api/v1/pipelines/{id}/events usam a sessão do navegador. Entrar no app como o usuário do cenário, copiar o cookie de sessão (DevTools › Application › Cookies) e enviá-lo no cabeçalho Cookie do Postman. {id} é o id do funil «Pedidos Bella», visível no endereço de Configurações › Funis."
+      ]
+    },
+    {
+      "titulo": "Como conferir o resultado",
+      "itens": [
+        "Etapa, valor e campos do pedido: abrir o card (ou GET /api/v1/leads/{lead_id}: stage, value_cents, custom_fields).",
+        "Histórico: linha do tempo do card. Cada evento aceito aparece como «Registro de uma integração»; mudança de etapa aparece como mudança de etapa feita pelo sistema.",
+        "Banco (quando o cenário pedir): psql no banco local, tabelas crm_pipeline_events, crm_lead_activities e api_audit_log."
+      ]
+    }
+  ],
+  "lastRun": {
+    "executedBy": null,
+    "executedAt": null,
+    "environment": null,
+    "build": null,
+    "summary": {
+      "pass": 0,
+      "fail": 0,
+      "blocked": 0,
+      "skipped": 0,
+      "pending": 94
+    }
+  },
+  "scenarios": [
+    {
+      "id": "CT-002.1",
+      "storyId": "US-002",
+      "requirements": [
+        "FR-1",
+        "FR-2"
+      ],
+      "title": "Banco recusa chave de evento fora do padrão",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Banco local com o baseline aplicado; psql conectado como dono do banco",
+        "Funil «Pedidos Bella» existente (anotar PIPELINE_ID e ORG_ID)"
+      ],
+      "steps": [
+        "Executar insert into crm_pipeline_events (organization_id, pipeline_id, key, label) values ('<ORG_ID>','<PIPELINE_ID>','Compra Final','Compra')",
+        "Executar o mesmo insert com key 'compra-final'",
+        "Executar o mesmo insert com key '1compra'"
+      ],
+      "expectedResult": [
+        "Os três comandos falham com violação de check constraint (chave só aceita minúsculas, números e _, começando por letra)",
+        "select count(*) from crm_pipeline_events devolve 0"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-002.2",
+      "storyId": "US-002",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Banco exige campo do valor e unidade juntos",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Mesmo ambiente do CT-002.1"
+      ],
+      "steps": [
+        "Executar insert com key 'x1', label 'X', value_path 'value' e value_unit nulo",
+        "Executar insert com key 'x2', label 'X', value_path nulo e value_unit 'reais'",
+        "Executar insert com key 'x3', label 'X', value_path 'value' e value_unit 'dolares'"
+      ],
+      "expectedResult": [
+        "Os três falham por check constraint",
+        "Nenhuma linha é criada"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-002.3",
+      "storyId": "US-002",
+      "requirements": [
+        "FR-2"
+      ],
+      "title": "Banco recusa a mesma chave duas vezes no mesmo funil, mas aceita em outro",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Dois funis na organização A: «Pedidos Bella» e «Agenda»"
+      ],
+      "steps": [
+        "Inserir key 'compra' no funil «Pedidos Bella»",
+        "Inserir key 'compra' de novo no mesmo funil",
+        "Inserir key 'compra' no funil «Agenda»"
+      ],
+      "expectedResult": [
+        "O segundo insert falha com erro de chave duplicada (23505)",
+        "O primeiro e o terceiro inserts passam"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-002.4",
+      "storyId": "US-002",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Instalação nova não traz nenhum evento pronto",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Banco novo, recém-instalado (sem nenhum evento cadastrado)",
+        "Funil «Pedidos Bella» recém-criado, sem ter cadastrado nada"
+      ],
+      "steps": [
+        "Entrar como gerente@teste.local",
+        "Abrir Configurações › Funis › Etapas do funil do funil «Pedidos Bella»",
+        "Rolar até a seção «Para onde o card vai em cada evento»"
+      ],
+      "expectedResult": [
+        "A seção mostra a lista vazia, sem nenhum evento pré-cadastrado",
+        "Há uma forma visível de cadastrar o primeiro evento"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-002.5",
+      "storyId": "US-002",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Atualizar um banco que já tem dados não quebra",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Banco com a tabela já criada e 5 eventos cadastrados",
+        "Cópia do baseline.sql da versão em teste"
+      ],
+      "steps": [
+        "Reaplicar o baseline.sql inteiro no banco pelo psql, sem a opção de parar no primeiro erro",
+        "Contar de novo os eventos: select count(*) from crm_pipeline_events"
+      ],
+      "expectedResult": [
+        "A reaplicação termina sem erro de objeto já existente",
+        "A contagem continua 5 e os dados de cada evento estão idênticos"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-003.1",
+      "storyId": "US-003",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Gerente de outra organização não lista os eventos do funil",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento «purchase» cadastrado no funil «Pedidos Bella» da organização A",
+        "Logado como gerente-b@teste.local (organização B)"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar GET {CRM}/api/v1/pipelines/{id do funil da A}/events"
+      ],
+      "expectedResult": [
+        "Resposta 404 (funil não encontrado)",
+        "Nenhum evento da organização A aparece no corpo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-003.2",
+      "storyId": "US-003",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Gerente de outra organização não cria evento no funil alheio",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Logado como gerente-b@teste.local",
+        "Funil «Pedidos Bella» da A sem o evento «intruso»"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST {CRM}/api/v1/pipelines/{id do funil da A}/events com o corpo {\"key\":\"intruso\",\"label\":\"Intruso\"}",
+        "Entrar como gerente@teste.local e abrir a seção de eventos do funil"
+      ],
+      "expectedResult": [
+        "O POST devolve 404",
+        "O evento «intruso» não existe no funil da organização A"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-003.3",
+      "storyId": "US-003",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Leitura direta no banco como usuário da outra organização devolve zero linhas",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Um evento em cada organização (A: purchase; B: purchase)",
+        "JWT de gerente-b@teste.local (copiar do cookie de sessão)"
+      ],
+      "steps": [
+        "Enviar GET {SUPABASE}/rest/v1/crm_pipeline_events?select=* com a anon key e o cabeçalho Authorization: Bearer <JWT da B>",
+        "Repetir com o JWT de gerente@teste.local (A)"
+      ],
+      "expectedResult": [
+        "Com o JWT da B, só o evento da organização B aparece",
+        "Com o JWT da A, só o evento da organização A aparece"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-004.1",
+      "storyId": "US-004",
+      "requirements": [
+        "FR-7"
+      ],
+      "title": "Banco aceita o mesmo event_id em pedidos diferentes e recusa no mesmo pedido",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Dois pedidos abertos: L1 e L2 (contatos diferentes), ambos da organização A"
+      ],
+      "steps": [
+        "Inserir em crm_lead_activities uma atividade type 'external_event' para L1 com payload {\"event\":\"page_view\",\"event_id\":\"dup-1\"}",
+        "Inserir a mesma atividade de novo para L1",
+        "Inserir a mesma atividade com event_id 'dup-1' para L2"
+      ],
+      "expectedResult": [
+        "O segundo insert falha com 23505 (índice uniq_lead_activities_external_event_id)",
+        "O primeiro e o terceiro passam"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-004.2",
+      "storyId": "US-004",
+      "requirements": [
+        "FR-7"
+      ],
+      "title": "Atualização do banco remove duplicatas antigas e mantém a mais antiga",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Banco de uma versão anterior, sem o índice, com 3 atividades external_event do mesmo pedido e do mesmo event_id 'dup-9', com datas de criação diferentes (anotar a mais antiga)"
+      ],
+      "steps": [
+        "Aplicar o baseline.sql da versão em teste pelo psql, sem parar no primeiro erro",
+        "Consultar select id, created_at from crm_lead_activities where payload->>'event_id' = 'dup-9'",
+        "Aplicar o baseline.sql uma segunda vez"
+      ],
+      "expectedResult": [
+        "Sobra 1 só linha com event_id 'dup-9', a mais antiga",
+        "A segunda aplicação não dá erro nem muda nada"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-005.1",
+      "storyId": "US-005",
+      "requirements": [
+        "FR-7"
+      ],
+      "title": "Reenvio em sequência pela ferramenta antiga continua devolvendo registrado e depois repetido",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto"
+      ],
+      "steps": [
+        "Chamar crm_add_lead_events com {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"qualquer_coisa\",\"event_id\":\"seq-1\"}]}",
+        "Chamar de novo exatamente igual"
+      ],
+      "expectedResult": [
+        "A primeira resposta traz o evento como registrado",
+        "A segunda traz o mesmo event_id como repetido",
+        "A linha do tempo de L1 tem 1 só registro desse evento"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-005.2",
+      "storyId": "US-005",
+      "requirements": [
+        "FR-7"
+      ],
+      "title": "Duas chamadas simultâneas com o mesmo event_id gravam uma só vez",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido L1 aberto; evento page_view cadastrado",
+        "Postman Runner (ou dois terminais) capaz de disparar duas chamadas ao mesmo tempo"
+      ],
+      "steps": [
+        "Preparar duas chamadas idênticas de crm_track_event com {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"corrida-1\"}]}",
+        "Disparar as duas no mesmo instante (repetir a rodada 5 vezes, trocando o event_id)"
+      ],
+      "expectedResult": [
+        "Em cada rodada, uma chamada devolve registrado e a outra repetido, nunca erro",
+        "A linha do tempo mostra 1 registro por rodada, não 2"
+      ],
+      "automatable": true,
+      "notes": "Sem automação, a janela de corrida pode não ser atingida; por isso 5 rodadas.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.1",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4",
+        "FR-6"
+      ],
+      "title": "Registrar um evento cadastrado",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados",
+        "Pedido L1 aberto em Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"t-001\",\"data\":{\"screen_name\":\"home\"}}]}",
+        "Abrir o card de L1 e olhar a linha do tempo"
+      ],
+      "expectedResult": [
+        "resultados traz 1 item, event_id «t-001», resultado «registrado»",
+        "A linha do tempo ganha um «Registro de uma integração» com a hora de agora"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.2",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4",
+        "FR-5"
+      ],
+      "title": "Lote misto devolve um resultado por evento, na ordem enviada",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados e o evento promo_dia cadastrado e DESATIVADO",
+        "Pedido L1 aberto; o evento t-100 de page_view já foi registrado antes"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"view_item\",\"event_id\":\"t-101\"},{\"event\":\"cupom_xpto\",\"event_id\":\"t-102\"},{\"event\":\"page_view\",\"event_id\":\"t-100\"},{\"event\":\"promo_dia\",\"event_id\":\"t-103\"}]}"
+      ],
+      "expectedResult": [
+        "resultados vem na ordem enviada, com 4 itens",
+        "t-101: registrado · t-102: recusado, codigo evento_nao_cadastrado · t-100: repetido · t-103: recusado, codigo evento_inativo",
+        "A recusa de t-102 e t-103 não impede o registro de t-101"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.3",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-5"
+      ],
+      "title": "A recusa por evento desconhecido lista as chaves ativas",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Ajuda para reconhecer e recuperar de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados e promo_dia desativado"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"cupom_xpto\",\"event_id\":\"t-110\"}]}"
+      ],
+      "expectedResult": [
+        "resultado «recusado», codigo «evento_nao_cadastrado»",
+        "A mensagem cita page_view, view_item, cart_sync, begin_checkout e purchase",
+        "A mensagem NÃO cita promo_dia (desativado)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.4",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Limite de 50 eventos por chamada: 50 passam, 51 e 0 não",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "Chamar crm_track_event com 50 eventos page_view, event_id de b-001 a b-050",
+        "Chamar com 51 eventos (b-101 a b-151)",
+        "Chamar com events vazio []"
+      ],
+      "expectedResult": [
+        "A chamada de 50 devolve 50 resultados",
+        "A de 51 é recusada por validação (máximo de 50) e nenhum dos 51 é registrado",
+        "A de 0 é recusada por validação (mínimo de 1)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.5",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Evento acima de 8 KB é recusado sem derrubar o lote",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos 2 eventos page_view: g-001 com data.texto de 9.000 caracteres e g-002 com data.texto de 100 caracteres"
+      ],
+      "expectedResult": [
+        "g-001: recusado, codigo «evento_grande»",
+        "g-002: registrado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.6",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Chamada acima de 64 KB é recusada",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos 10 eventos page_view, cada um com data.texto de 7.000 caracteres (cada um abaixo de 8 KB, total acima de 64 KB)"
+      ],
+      "expectedResult": [
+        "A chamada devolve erro de tamanho",
+        "Nenhum dos 10 eventos aparece na linha do tempo"
+      ],
+      "automatable": false,
+      "notes": "A forma exata do erro não está na especificação; o QA registra o texto recebido na observação.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.7",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Hora do evento no passado: 29 dias passa, 31 dias é recusada",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos 2 eventos: h-001 com at de 29 dias atrás e h-002 com at de 31 dias atrás (formato ISO com fuso)"
+      ],
+      "expectedResult": [
+        "h-001: registrado",
+        "h-002: recusado, codigo «hora_fora_da_janela»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.8",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Hora do evento no futuro: 4 minutos passa, 6 minutos é recusada",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos 2 eventos: f-001 com at 4 minutos à frente e f-002 com at 6 minutos à frente"
+      ],
+      "expectedResult": [
+        "f-001: registrado",
+        "f-002: recusado, codigo «hora_fora_da_janela»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.9",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-6"
+      ],
+      "title": "A hora gravada é a do evento, não a do envio",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos 1 evento page_view com at «2026-10-20T10:00:00-03:00» (ajustar para uma data dentro dos últimos 30 dias)",
+        "Abrir a linha do tempo do card L1"
+      ],
+      "expectedResult": [
+        "O registro aparece com a data e a hora informadas em at, não com a hora do envio"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.10",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Campos obrigatórios: sem event_id e sem event",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "media",
+      "preconditions": [
+        "Pedido L1 aberto"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"page_view\"}]}",
+        "Chamar com {\"lead_id\":\"<L1>\",\"events\":[{\"event_id\":\"x-1\"}]}"
+      ],
+      "expectedResult": [
+        "As duas chamadas são recusadas por validação, indicando o campo que falta",
+        "Nada é registrado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.11",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "O funil vem do pedido, nunca da entrada",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Segundo funil «Agenda» com o evento outro_evento cadastrado; «Pedidos Bella» sem esse evento",
+        "Pedido L1 no funil «Pedidos Bella»"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"pipeline_id\":\"<id do funil Agenda>\",\"events\":[{\"event\":\"outro_evento\",\"event_id\":\"p-001\"}]}"
+      ],
+      "expectedResult": [
+        "A chamada é recusada por validação, ou o evento sai como recusado «evento_nao_cadastrado»",
+        "Em nenhum caso o evento é registrado em L1"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.12",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Pedido de outra organização não é encontrado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido L1 pertence à organização A",
+        "TOKEN_B (organização B)"
+      ],
+      "steps": [
+        "Com TOKEN_B, chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"x-b1\"}]}"
+      ],
+      "expectedResult": [
+        "Resposta de erro com a mensagem «Pedido não encontrado.»",
+        "A linha do tempo de L1 não ganha registro"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.13",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Pedido de contato pessoal é recusado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Contato «Fulano Pessoal» marcado como pessoal, com um pedido aberto (id LP)"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<LP>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"pp-1\"}]}"
+      ],
+      "expectedResult": [
+        "Resposta de erro 403",
+        "Nada é registrado no pedido"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.14",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Token só de leitura não consegue escrever; sem token também não",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Token TOKEN_R criado só com o escopo de leitura do MCP"
+      ],
+      "steps": [
+        "Com TOKEN_R, chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"page_view\",\"event_id\":\"r-1\"}]}",
+        "Repetir sem o cabeçalho Authorization"
+      ],
+      "expectedResult": [
+        "Com TOKEN_R: recusado por falta de permissão de escrita",
+        "Sem token: 401",
+        "Nada é registrado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-008.15",
+      "storyId": "US-008",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "Um lote de 50 eventos conta como uma só escrita no limite do token",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "desempenho",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Token com limite de 30 escritas por minuto, sem uso no último minuto",
+        "Pedido L1 aberto; page_view cadastrado"
+      ],
+      "steps": [
+        "Chamar crm_track_event com 50 eventos (ids lt-001 a lt-050)",
+        "Dentro do mesmo minuto, fazer mais 29 chamadas com 1 evento cada",
+        "Fazer a 31ª chamada ainda dentro do minuto"
+      ],
+      "expectedResult": [
+        "As 30 primeiras chamadas são aceitas",
+        "A 31ª é recusada por limite de taxa (429)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.1",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-8"
+      ],
+      "title": "A mesma compra com outro event_id é repetição",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados; purchase com chave de repetição order_id",
+        "Pedido L1 em Revisão"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase, event_id «c-1», data {\"order_id\":\"PED-1\",\"value\":73.9}",
+        "Chamar de novo com event_id «c-2» e o mesmo order_id PED-1, value 99"
+      ],
+      "expectedResult": [
+        "A primeira: registrado",
+        "A segunda: repetido",
+        "O valor do pedido continua 7390 centavos e a linha do tempo tem 1 só compra"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.2",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-9"
+      ],
+      "title": "O último carrinho vence",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "cart_sync com «guardar em» carrinho",
+        "Pedido L1 aberto"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos cart_sync, event_id «k-1», at 10:00, data {\"items\":[{\"item_id\":\"pizza-1\",\"quantity\":1}]}",
+        "Chamar cart_sync, event_id «k-2», at 10:05, data {\"items\":[{\"item_id\":\"pizza-1\",\"quantity\":1},{\"item_id\":\"suco-1\",\"quantity\":2}]}",
+        "Consultar GET /api/v1/leads/<L1>"
+      ],
+      "expectedResult": [
+        "Ambas: registrado, estado «aplicado»",
+        "custom_fields.carrinho mostra os 2 itens (pizza-1 e suco-1)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.3",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-9"
+      ],
+      "title": "Carrinho que chega atrasado não sobrescreve o mais novo",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Mesmo cenário do CT-009.2, pedido novo"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos cart_sync, event_id «k-11», at 10:05, itens pizza-1 e suco-1",
+        "Chamar cart_sync, event_id «k-10», at 10:00, só pizza-1 (chega depois, mas é mais antigo)",
+        "Consultar GET /api/v1/leads/<id>"
+      ],
+      "expectedResult": [
+        "O segundo devolve registrado com estado «ignorado_antigo»",
+        "custom_fields.carrinho continua com pizza-1 e suco-1",
+        "Os dois registros aparecem na linha do tempo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.4",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-9"
+      ],
+      "title": "Dois carrinhos com a mesma hora: o que chega por último vale",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Mesmo ambiente, pedido novo"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos cart_sync, event_id «k-21», at 10:00:00, itens [pizza-1]",
+        "Chamar cart_sync, event_id «k-22», at 10:00:00 (exatamente igual), itens [suco-1]"
+      ],
+      "expectedResult": [
+        "Os dois: registrado, estado «aplicado»",
+        "custom_fields.carrinho mostra suco-1"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.5",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-10"
+      ],
+      "title": "Valor em reais vira centavos e é gravado antes de mover",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "purchase com campo do valor value em reais",
+        "Pedido novo em Revisão, sem valor"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase, event_id «v-1», data {\"order_id\":\"PED-V1\",\"value\":73.9}",
+        "Abrir o card"
+      ],
+      "expectedResult": [
+        "valor «aplicado»",
+        "O card está em Compras já com valor de R$ 73,90 (value_cents 7390)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.6",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-10"
+      ],
+      "title": "Arredondamento e zero em reais",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Mesmo ambiente; dois pedidos novos em Revisão"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase value 19.999 em um pedido",
+        "Chamar purchase value 0 em outro pedido (order_id diferente)"
+      ],
+      "expectedResult": [
+        "19.999 vira 2000 centavos",
+        "0 é aceito e o pedido fica com valor 0"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.7",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-10"
+      ],
+      "title": "Valor em centavos exige número inteiro",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento pagou_c cadastrado: destino Compras, campo do valor total, unidade CENTAVOS",
+        "Dois pedidos novos"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos pagou_c com data {\"total\":7390}",
+        "Chamar pagou_c em outro pedido com data {\"total\":73.9}"
+      ],
+      "expectedResult": [
+        "total 7390 vira value_cents 7390",
+        "total 73.9 é recusado com codigo «valor_invalido» e nada é gravado para esse evento"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.8",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-10"
+      ],
+      "title": "Valor inválido é recusado e não grava nada",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "alta",
+      "preconditions": [
+        "purchase com campo do valor value; pedido novo em Revisão"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase com data {\"order_id\":\"PED-X1\",\"value\":\"abc\"}",
+        "Repetir com value -5",
+        "Abrir o card e a linha do tempo"
+      ],
+      "expectedResult": [
+        "As duas chamadas: recusado, codigo «valor_invalido»",
+        "O card continua em Revisão, sem valor novo",
+        "Não há registro novo na linha do tempo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.9",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-10"
+      ],
+      "title": "Não existe teto para o valor da venda",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "purchase com campo do valor value; pedido novo em Revisão"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase com data {\"order_id\":\"PED-GRANDE\",\"value\":99999999.99}"
+      ],
+      "expectedResult": [
+        "valor «aplicado»; value_cents 9999999999"
+      ],
+      "automatable": true,
+      "notes": "Decisão do dono do produto: sem teto. O Design Doc ainda menciona um teto fixo; vale o PRD.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.10",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-12"
+      ],
+      "title": "Pedido encerrado não muda de estado nem de valor",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido ganho em Compras com valor 5000 centavos e carrinho gravado (fechado por um purchase anterior)"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos cart_sync com itens novos e begin_checkout com value 200"
+      ],
+      "expectedResult": [
+        "estado: «ignorado_pedido_encerrado»; valor: «ignorado_pedido_encerrado»",
+        "O carrinho e o valor do card (5000) permanecem como estavam"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-009.11",
+      "storyId": "US-009",
+      "requirements": [
+        "FR-9",
+        "FR-10"
+      ],
+      "title": "Reenvio de um evento já registrado ainda completa estado e valor",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido novo em Revisão",
+        "Uma atividade external_event com event_id «rec-1» inserida direto no banco (simula queda do servidor antes de gravar valor e estado), com data {\"order_id\":\"PED-R\",\"value\":40}"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase, event_id «rec-1», data {\"order_id\":\"PED-R\",\"value\":40}",
+        "Abrir o card e a linha do tempo"
+      ],
+      "expectedResult": [
+        "O card termina em Compras com valor R$ 40,00 e o estado gravado",
+        "A linha do tempo continua com 1 só registro de «rec-1»"
+      ],
+      "automatable": false,
+      "notes": "O texto do resultado (repetido ou registrado) não é afirmado: a especificação se contradiz aqui. Ver coverage.blockedByOpenQuestions.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.1",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-11"
+      ],
+      "title": "Sequência completa, um evento por chamada, termina em Compras",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados",
+        "Pedido novo em Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos page_view; depois abrir o card",
+        "Chamar view_item",
+        "Chamar cart_sync",
+        "Chamar begin_checkout com value 73.9",
+        "Chamar purchase com order_id PED-S1 e value 73.9"
+      ],
+      "expectedResult": [
+        "Depois de cada chamada o card está em: Visitou o cardápio, Viu um item, Carrinho, Revisão, Compras",
+        "No fim o pedido está ganho, com R$ 73,90"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.2",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-11"
+      ],
+      "title": "Os cinco eventos em um único lote chegam a Compras",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Mesmo ambiente; pedido novo em Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos um lote com os 5 eventos em ordem (page_view, view_item, cart_sync, begin_checkout, purchase), event_ids diferentes, at crescente"
+      ],
+      "expectedResult": [
+        "5 resultados «registrado», o último com movimento «movido» e etapa «Compras»",
+        "O card termina em Compras com valor"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.3",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-11"
+      ],
+      "title": "Evento de nível menor não faz o pedido retroceder",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido novo em Revisão"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos view_item, event_id «n-1»"
+      ],
+      "expectedResult": [
+        "movimento «ja_na_etapa_ou_adiante»",
+        "O card continua em Revisão",
+        "O evento fica registrado na linha do tempo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.4",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-14"
+      ],
+      "title": "Mover para a etapa em que o pedido já está não gera mudança de etapa",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido novo na etapa Visitou o cardápio"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos page_view, event_id «m-1»",
+        "Olhar a linha do tempo"
+      ],
+      "expectedResult": [
+        "movimento «ja_na_etapa_ou_adiante»",
+        "A linha do tempo ganha o registro do evento, mas nenhuma nova mudança de etapa"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.5",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-11"
+      ],
+      "title": "Desvio por «Chamar humano» não trava a compra",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido novo em Revisão; um atendente o moveu à mão para «Chamar humano»"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase com order_id PED-D1 e value 50"
+      ],
+      "expectedResult": [
+        "O card vai para Compras, ganho, com R$ 50,00",
+        "O resultado traz movimento «movido»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.6",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-13"
+      ],
+      "title": "Movimento manual da equipe é respeitado, mas estado e valor são gravados",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido novo em Carrinho; um usuário (atendente@teste.local) o moveu à mão para Conversas pela tela"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos cart_sync com itens [pizza-1] (cart_sync respeita movimento manual)",
+        "Consultar GET /api/v1/leads/<id>"
+      ],
+      "expectedResult": [
+        "resultado «registrado» com movimento «respeita_movimento_manual»",
+        "O card continua em Conversas",
+        "custom_fields.carrinho contém pizza-1"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.7",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-13"
+      ],
+      "title": "Depois de um evento que move, os seguintes voltam a mover",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento retomou_carrinho cadastrado: destino Carrinho, respeitar movimento manual DESLIGADO",
+        "Pedido novo; um usuário o moveu à mão para Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos retomou_carrinho",
+        "Chamar begin_checkout (que respeita movimento manual) com value 10"
+      ],
+      "expectedResult": [
+        "retomou_carrinho move o card para Carrinho",
+        "begin_checkout em seguida move o card para Revisão (o último movimento passou a ser do sistema)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.8",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-11"
+      ],
+      "title": "Pedido perdido não é reaberto por evento",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido novo movido para Cancelado (perda) pela tela"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase com order_id PED-P1 e value 30"
+      ],
+      "expectedResult": [
+        "movimento «pedido_encerrado»",
+        "O card continua em Cancelado, sem valor novo",
+        "O evento fica registrado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.9",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-3"
+      ],
+      "title": "Funil recusa o ganho: estado e valor ficam, o card não anda",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "A etapa Compras exige o campo «Forma de pagamento» (campo obrigatório por etapa, configurado em Configurações › Funis)",
+        "Pedido novo em Revisão sem esse campo preenchido"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos purchase com order_id PED-F1 e value 60"
+      ],
+      "expectedResult": [
+        "movimento «recusado_pelo_funil» com a mensagem do funil citando o campo obrigatório",
+        "O card continua em Revisão",
+        "O valor R$ 60,00 e o estado «compra» já estão gravados no card"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.10",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-3"
+      ],
+      "title": "Etapa de destino arquivada só registra",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento arquivado_dest cadastrado com destino Carrinho; depois a etapa Carrinho é arquivada em Configurações › Funis",
+        "Pedido novo em Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos arquivado_dest"
+      ],
+      "expectedResult": [
+        "movimento «etapa_arquivada»",
+        "O card continua em Conversas",
+        "O evento fica registrado na linha do tempo"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.11",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Evento sem destino («Não mover») só registra",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento observou cadastrado com destino «Não mover»",
+        "Pedido novo em Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos observou"
+      ],
+      "expectedResult": [
+        "movimento «sem_destino»",
+        "O card continua em Conversas",
+        "O evento fica registrado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.12",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-11"
+      ],
+      "title": "Dois eventos simultâneos geram uma só mudança de etapa",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido novo na etapa Visitou o cardápio",
+        "Dois eventos view_item prontos, event_ids «sim-1» e «sim-2»"
+      ],
+      "steps": [
+        "Disparar as duas chamadas ao mesmo tempo (Postman Runner), uma para cada event_id",
+        "Olhar a linha do tempo do card"
+      ],
+      "expectedResult": [
+        "Os dois eventos ficam registrados",
+        "Há uma só mudança de etapa, para «Viu um item»",
+        "Um dos resultados pode trazer movimento «conflito» ou «ja_na_etapa_ou_adiante»; nenhum é erro"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-010.13",
+      "storyId": "US-010",
+      "requirements": [
+        "FR-13"
+      ],
+      "title": "A mudança de etapa feita pelo evento aparece como feita pelo sistema",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Pedido novo em Conversas"
+      ],
+      "steps": [
+        "chamar a ferramenta crm_track_event (ver «Como chamar o MCP» na Preparação) com os argumentos page_view",
+        "Abrir o card e a linha do tempo",
+        "Olhar quem aparece como autor da mudança de etapa"
+      ],
+      "expectedResult": [
+        "A mudança para «Visitou o cardápio» aparece como feita pelo sistema/integração, sem nome de pessoa"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-011.1",
+      "storyId": "US-011",
+      "requirements": [
+        "FR-15"
+      ],
+      "title": "Listar os eventos de um funil sem expor ids de etapa",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados; promo_dia desativado"
+      ],
+      "steps": [
+        "Chamar crm_list_pipeline_events com {\"pipeline_id\":\"<id do funil Pedidos Bella>\"}"
+      ],
+      "expectedResult": [
+        "Cada evento traz chave, nome, ativo (verdadeiro/falso), nome da etapa de destino, se guarda estado e se define valor",
+        "purchase aparece com etapa «Compras», guarda estado e define valor",
+        "promo_dia aparece como inativo",
+        "A resposta não contém nenhum id de etapa (uuid de crm_stages)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-011.2",
+      "storyId": "US-011",
+      "requirements": [
+        "FR-15"
+      ],
+      "title": "Funil de outra organização não é listado",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "TOKEN_B (organização B)"
+      ],
+      "steps": [
+        "Com TOKEN_B, chamar crm_list_pipeline_events com o id do funil da organização A"
+      ],
+      "expectedResult": [
+        "Resposta de erro (funil não encontrado)",
+        "Nenhum evento da A aparece"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-011.3",
+      "storyId": "US-011",
+      "requirements": [
+        "FR-15"
+      ],
+      "title": "A ferramenta antiga continua aceitando qualquer nome de evento",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Pedido L1 aberto; «nome_que_nao_existe» NÃO cadastrado no funil"
+      ],
+      "steps": [
+        "Chamar crm_add_lead_events com {\"lead_id\":\"<L1>\",\"events\":[{\"event\":\"nome_que_nao_existe\",\"event_id\":\"old-1\"}]}"
+      ],
+      "expectedResult": [
+        "O evento é registrado (contrato permissivo)",
+        "O card não muda de etapa"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-011.4",
+      "storyId": "US-011",
+      "requirements": [
+        "FR-4"
+      ],
+      "title": "A ferramenta nova aparece no catálogo com um rótulo sem jargão",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Logado como gerente@teste.local"
+      ],
+      "steps": [
+        "Abrir a tela onde se escolhem as ferramentas liberadas para um agente de IA ou para um token (Configurações › IA, na lista de ferramentas)",
+        "Procurar pela ferramenta que registra o que o cliente fez fora do CRM"
+      ],
+      "expectedResult": [
+        "Existe uma ferramenta com o rótulo «Registrar o que o cliente fez fora do CRM»",
+        "O rótulo e a descrição não usam jargão técnico (nada de event_id, jsonb)"
+      ],
+      "automatable": false,
+      "notes": "O caminho exato da tela não consta nos insumos; o QA anota onde encontrou.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-013.1",
+      "storyId": "US-013",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Listar eventos com sinais de uso",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Eventos de referência cadastrados",
+        "Enviados 3 eventos page_view e nenhum view_item"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), GET {CRM}/api/v1/pipelines/{id}/events"
+      ],
+      "expectedResult": [
+        "Os 5 eventos aparecem",
+        "page_view traz a hora do último recebimento e contagem 3 nos últimos 7 dias",
+        "view_item traz sem recebimento e contagem 0"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-013.2",
+      "storyId": "US-013",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Papéis abaixo de gerente e quem não está logado não listam",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessões de atendente@teste.local e leitor@teste.local"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar o GET como atendente",
+        "Enviar o GET como leitor",
+        "Enviar o GET sem cookie"
+      ],
+      "expectedResult": [
+        "Atendente e leitor: 403",
+        "Sem login: 401"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.1",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-1",
+        "FR-17"
+      ],
+      "title": "Criar um evento completo",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Funil «Pedidos Bella» sem o evento «compra_nova»",
+        "Logado como gerente@teste.local"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST {CRM}/api/v1/pipelines/{id}/events com {\"key\":\"compra_nova\",\"label\":\"Compra nova\",\"stage_id\":\"<id da etapa Compras>\",\"state_key\":\"compra_nova\",\"value_path\":\"value\",\"value_unit\":\"reais\",\"dedupe_path\":\"order_id\",\"respects_manual_move\":false}",
+        "Enviar GET da lista",
+        "Conferir a tabela api_audit_log"
+      ],
+      "expectedResult": [
+        "O POST devolve sucesso com o evento criado",
+        "O GET lista «compra_nova» com os mesmos valores",
+        "api_audit_log tem uma linha com ação pipeline_event.created para esse evento"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.2",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-2"
+      ],
+      "title": "Chave duplicada no mesmo funil é recusada",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento purchase já cadastrado"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «purchase» e label «Outra compra»"
+      ],
+      "expectedResult": [
+        "Recusado com mensagem dizendo que a chave já existe",
+        "Continua existindo um só evento purchase"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.3",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-2"
+      ],
+      "title": "Chaves fora do padrão são recusadas",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «Compra» (maiúscula)",
+        "Repetir com «1compra»",
+        "Repetir com «compra-final»",
+        "Repetir com key vazia"
+      ],
+      "expectedResult": [
+        "As quatro são recusadas por validação, com mensagem sobre o formato da chave"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.4",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-2"
+      ],
+      "title": "Chave com 64 caracteres passa e com 65 não",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «a» seguida de 63 letras «b» (64 no total), label «Limite»",
+        "Repetir com 65 caracteres e label «Limite 2»"
+      ],
+      "expectedResult": [
+        "64 caracteres: criado",
+        "65 caracteres: recusado por validação"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.5",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Nome do evento: 80 caracteres passa; 81 e só espaços não",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com label de 80 caracteres e key «lb80»",
+        "Repetir com label de 81 caracteres e key «lb81»",
+        "Repetir com label «   » (só espaços) e key «lb0»"
+      ],
+      "expectedResult": [
+        "80: criado",
+        "81: recusado",
+        "Só espaços: recusado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.6",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-3"
+      ],
+      "title": "Etapa de perda não pode ser destino",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «cancelou» e stage_id da etapa Cancelado (perda)"
+      ],
+      "expectedResult": [
+        "Recusado com mensagem dizendo que etapa de perda não serve de destino",
+        "O evento não é criado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.7",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-3"
+      ],
+      "title": "Etapa de outro funil ou arquivada não pode ser destino",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Etapa «Agendado» do funil «Agenda»; etapa «Antiga» do funil «Pedidos Bella» já arquivada"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «e1» e stage_id da etapa Agendado",
+        "Enviar POST com key «e2» e stage_id da etapa Antiga"
+      ],
+      "expectedResult": [
+        "Os dois são recusados",
+        "Nenhum evento é criado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.8",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "«Guardar em» igual a um campo declarado do funil é erro",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "O funil tem o campo declarado «Observação» (chave observacao)"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «obs1», label «Obs» e state_key «observacao»"
+      ],
+      "expectedResult": [
+        "Resposta 422 com mensagem sobre o conflito com o campo do funil",
+        "O evento não é criado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.9",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "«Guardar em» repetido entre dois eventos salva e avisa",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento cart_sync já usa state_key «carrinho»"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «cart2», label «Carrinho 2» e state_key «carrinho»"
+      ],
+      "expectedResult": [
+        "O evento é criado",
+        "A resposta traz um aviso dizendo que outro evento já guarda na mesma chave"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.10",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Campo do valor e unidade têm de vir juntos",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com key «v1», label «V» e value_path «value» sem value_unit",
+        "Enviar POST com key «v2», label «V» e value_unit «reais» sem value_path",
+        "Enviar POST com value_unit «dolares»"
+      ],
+      "expectedResult": [
+        "Os três são recusados por validação"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.11",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Criar com a mesma Idempotency-Key duas vezes cria um só evento",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Logado como gerente"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar POST com o cabeçalho Idempotency-Key: 11111111-1111-4111-8111-111111111111 e key «idem1»",
+        "Enviar de novo exatamente igual",
+        "Listar os eventos"
+      ],
+      "expectedResult": [
+        "As duas respostas trazem o mesmo evento",
+        "A lista tem um só «idem1»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.12",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Papel insuficiente e organização no corpo",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessão de atendente@teste.local; sessão de gerente@teste.local"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), como atendente, enviar POST com key «ag1»",
+        "Como gerente, enviar POST com key «org1» e organization_id da organização B no corpo",
+        "Conferir em qual organização o evento «org1» existe"
+      ],
+      "expectedResult": [
+        "Atendente: 403",
+        "Gerente: o evento é criado (ou o corpo é recusado) e nunca na organização B; a organização vem da sessão"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-014.13",
+      "storyId": "US-014",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Texto com HTML no nome do evento aparece como texto",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento criado com label «<img src=x onerror=alert(1)>» (pelo POST)"
+      ],
+      "steps": [
+        "Abrir a seção de eventos do funil na tela",
+        "Olhar a linha do evento"
+      ],
+      "expectedResult": [
+        "O texto aparece literalmente, sem executar nada e sem imagem quebrada"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-015.1",
+      "storyId": "US-015",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Editar a etapa de destino muda para onde os próximos eventos levam",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento observou com destino «Não mover»; pedido novo em Conversas"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar PATCH {CRM}/api/v1/pipelines/{id}/events/{id do evento observou} com stage_id da etapa Carrinho",
+        "Chamar crm_track_event com observou",
+        "Conferir api_audit_log"
+      ],
+      "expectedResult": [
+        "O PATCH devolve o evento já com a etapa Carrinho",
+        "O card vai para Carrinho",
+        "api_audit_log tem pipeline_event.updated"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-015.2",
+      "storyId": "US-015",
+      "requirements": [
+        "FR-2"
+      ],
+      "title": "A chave é imutável quando já existe atividade com ela",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Ajuda para reconhecer e recuperar de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Evento page_view com pelo menos 1 registro no histórico"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar PATCH no evento page_view com {\"key\":\"visita\"}"
+      ],
+      "expectedResult": [
+        "Resposta 409 com mensagem clara dizendo que a chave não muda depois de usada",
+        "A chave continua page_view"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-015.3",
+      "storyId": "US-015",
+      "requirements": [
+        "FR-2"
+      ],
+      "title": "A chave pode mudar enquanto ninguém a usou",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento «novo_sem_uso» criado e nunca recebido"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar PATCH com {\"key\":\"renomeado\"}"
+      ],
+      "expectedResult": [
+        "Sucesso; o evento aparece com a chave «renomeado»"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-015.4",
+      "storyId": "US-015",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Desativar preserva o histórico e passa a recusar o evento",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento view_item com 2 registros no histórico; pedido L1 aberto"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar DELETE {CRM}/api/v1/pipelines/{id}/events/{id do evento view_item}",
+        "Listar os eventos",
+        "Chamar crm_track_event com view_item, event_id «des-1»",
+        "Olhar a linha do tempo de um pedido que já recebeu view_item",
+        "Conferir api_audit_log"
+      ],
+      "expectedResult": [
+        "O DELETE responde sucesso e o evento continua na lista como inativo",
+        "des-1: recusado, codigo «evento_inativo»",
+        "Os 2 registros antigos continuam na linha do tempo",
+        "api_audit_log tem pipeline_event.deactivated"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-015.5",
+      "storyId": "US-015",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Editar ou desativar evento de outro funil/organização dá 404",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessão de gerente-b@teste.local",
+        "Id de um evento da organização A"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar PATCH e DELETE em /api/v1/pipelines/{id do funil da A}/events/{id do evento}"
+      ],
+      "expectedResult": [
+        "As duas chamadas devolvem 404",
+        "O evento da A não muda"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-015.6",
+      "storyId": "US-015",
+      "requirements": [
+        "FR-17"
+      ],
+      "title": "Atendente não edita nem desativa",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Sessão de atendente@teste.local"
+      ],
+      "steps": [
+        "com o cookie de sessão do gerente (ver «Como chamar a API do app»), enviar PATCH e DELETE em um evento da organização A"
+      ],
+      "expectedResult": [
+        "As duas devolvem 403"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.1",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "A seção fica no lugar certo da tela de funis",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Logado como gerente@teste.local"
+      ],
+      "steps": [
+        "Abrir Configurações › Funis",
+        "Abrir as etapas do funil «Pedidos Bella»",
+        "Rolar a página"
+      ],
+      "expectedResult": [
+        "Existe a seção «Para onde o card vai em cada evento»",
+        "Ela aparece logo abaixo de «Para onde o card vai em cada passo»",
+        "O menu lateral não ganhou nenhum item novo"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.2",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-1",
+        "FR-16"
+      ],
+      "title": "Cadastrar um evento pela tela",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Funil «Pedidos Bella» sem eventos"
+      ],
+      "steps": [
+        "Na seção «Para onde o card vai em cada evento», clicar no botão para adicionar um evento",
+        "Preencher o nome com «Visitou o cardápio» e a chave com «page_view»",
+        "Escolher a etapa de destino «Visitou o cardápio»",
+        "Salvar"
+      ],
+      "expectedResult": [
+        "A linha do evento aparece com o nome, a chave page_view e a etapa «Visitou o cardápio»",
+        "Recarregar a página (F5): a linha continua lá"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.3",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Opções avançadas do evento",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Evento purchase recém-criado, só com nome, chave e destino Compras"
+      ],
+      "steps": [
+        "Abrir o painel recolhível das opções avançadas do evento",
+        "Preencher «guardar em» com compra, campo do valor com value, unidade reais, chave de repetição com order_id",
+        "Desligar «respeitar movimento manual»",
+        "Salvar, recarregar a página e reabrir o painel"
+      ],
+      "expectedResult": [
+        "Os cinco valores continuam como foram salvos",
+        "Os textos do painel estão em linguagem comum (nada de state_key, jsonb, value_path)"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.4",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-3"
+      ],
+      "title": "A lista de destinos não oferece etapa de perda nem arquivada",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Etapa «Antiga» arquivada; etapa Cancelado é de perda"
+      ],
+      "steps": [
+        "Abrir o cadastro de um evento",
+        "Abrir a lista de etapas de destino"
+      ],
+      "expectedResult": [
+        "A lista tem «Não mover» e as etapas ativas que não são de perda",
+        "Cancelado e Antiga não aparecem"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.5",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Editar a etapa de destino pela tela",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento view_item com destino «Viu um item»"
+      ],
+      "steps": [
+        "Clicar em editar no evento view_item",
+        "Trocar o destino para «Carrinho»",
+        "Salvar"
+      ],
+      "expectedResult": [
+        "A linha passa a mostrar o destino «Carrinho»",
+        "Depois de recarregar a página, continua «Carrinho»"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.6",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Desativar um evento pela tela",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Controle e liberdade do usuário",
+      "priority": "alta",
+      "preconditions": [
+        "Evento promo_dia ativo"
+      ],
+      "steps": [
+        "Clicar em desativar no evento promo_dia",
+        "Se a tela pedir confirmação, confirmar"
+      ],
+      "expectedResult": [
+        "O evento aparece como desativado (ou sai da lista de ativos), sem ser apagado do histórico",
+        "Chamar crm_track_event com promo_dia devolve «evento_inativo»"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.7",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Chave repetida mostra erro legível ao lado do formulário",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Ajuda para reconhecer e recuperar de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Evento purchase já cadastrado"
+      ],
+      "steps": [
+        "Adicionar um novo evento com chave «purchase»",
+        "Salvar"
+      ],
+      "expectedResult": [
+        "A tela mostra uma mensagem em português dizendo que essa chave já existe, perto do campo",
+        "O formulário continua com o que foi digitado",
+        "Nenhuma mensagem genérica do tipo «ocorreu um erro»"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.8",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-1"
+      ],
+      "title": "Duplo clique em Salvar cria um só evento",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "media",
+      "preconditions": [
+        "Formulário de novo evento preenchido com chave «dclick»"
+      ],
+      "steps": [
+        "Dar dois cliques rápidos no botão de salvar",
+        "Recarregar a página"
+      ],
+      "expectedResult": [
+        "Existe uma só linha «dclick»"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.9",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Atendente e visualizador não conseguem cadastrar",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Sessões de atendente@teste.local e leitor@teste.local"
+      ],
+      "steps": [
+        "Entrar como atendente e tentar chegar à seção de eventos do funil",
+        "Repetir como visualizador"
+      ],
+      "expectedResult": [
+        "Não há como criar, editar ou desativar evento (a seção não aparece, fica só leitura, ou a ação é recusada com mensagem)",
+        "Nenhum evento muda"
+      ],
+      "automatable": false,
+      "notes": "O comportamento exato (oculta, só leitura ou recusa) não está nos insumos; o QA anota o que viu.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.10",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Teclado: cadastrar um evento sem usar o mouse",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "usabilidade",
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Seção de eventos aberta"
+      ],
+      "steps": [
+        "Percorrer com Tab até o botão de adicionar e acionar com Enter",
+        "Preencher os campos com Tab e digitação",
+        "Salvar com Enter"
+      ],
+      "expectedResult": [
+        "Todos os controles recebem foco visível",
+        "O evento é criado sem usar o mouse"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-016.11",
+      "storyId": "US-016",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Celular: a seção cabe em 375 px",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "usabilidade",
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Janela do navegador em 375 px de largura"
+      ],
+      "steps": [
+        "Abrir a seção de eventos com 5 eventos cadastrados",
+        "Abrir o painel de opções avançadas de um deles"
+      ],
+      "expectedResult": [
+        "Não há rolagem horizontal da página",
+        "Nenhum texto fica cortado e os botões são tocáveis"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.1",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Aviso de venda sem valor quando o destino é etapa de ganho",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Evento novo com destino Compras e sem campo do valor"
+      ],
+      "steps": [
+        "Escolher a etapa Compras como destino",
+        "Deixar o campo do valor vazio",
+        "Observar a tela e salvar"
+      ],
+      "expectedResult": [
+        "Aparece o aviso «esta etapa fecha a venda, mas o evento não define o valor, então a venda não será enviada como conversão»",
+        "O evento é salvo mesmo assim (o aviso não bloqueia)"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.2",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "O aviso some quando o campo do valor é preenchido",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Mesmo evento do CT-017.1, com o aviso visível"
+      ],
+      "steps": [
+        "Preencher o campo do valor com value e a unidade reais"
+      ],
+      "expectedResult": [
+        "O aviso de venda sem valor desaparece"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.3",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Aviso quando a etapa de destino foi arquivada",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Evento com destino Revisão; a etapa Revisão é arquivada depois"
+      ],
+      "steps": [
+        "Abrir a seção de eventos do funil"
+      ],
+      "expectedResult": [
+        "O evento mostra um aviso dizendo que a etapa foi arquivada e que o evento passa a só registrar"
+      ],
+      "automatable": false,
+      "notes": "O texto exato do aviso não consta nos insumos; o QA anota o que leu.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.4",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Aviso quando dois eventos guardam no mesmo lugar",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "cart_sync guarda em «carrinho»"
+      ],
+      "steps": [
+        "Editar outro evento e colocar «guardar em» = carrinho",
+        "Salvar"
+      ],
+      "expectedResult": [
+        "A tela avisa que outro evento já guarda no mesmo lugar",
+        "O evento é salvo"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.5",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "«Guardar em» igual a um campo do funil bloqueia o salvamento",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "O funil tem o campo «Observação» (chave observacao)"
+      ],
+      "steps": [
+        "Editar um evento e colocar «guardar em» = observacao",
+        "Tentar salvar"
+      ],
+      "expectedResult": [
+        "A tela mostra um erro (não um simples aviso) explicando o conflito com o campo do funil",
+        "O evento NÃO é salvo"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.6",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Evento que nunca recebeu nada diz isso",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Evento view_item recém-cadastrado, sem nenhum recebimento"
+      ],
+      "steps": [
+        "Abrir a seção de eventos"
+      ],
+      "expectedResult": [
+        "O evento mostra «ainda não recebeu nada»"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-017.7",
+      "storyId": "US-017",
+      "requirements": [
+        "FR-16"
+      ],
+      "title": "Evento que recebeu mostra último recebimento e contagem de 7 dias",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Evento page_view; 3 chamadas de page_view feitas hoje"
+      ],
+      "steps": [
+        "Recarregar a seção de eventos",
+        "Olhar a linha do page_view"
+      ],
+      "expectedResult": [
+        "Aparece «visto pela última vez» com a hora da chamada mais recente",
+        "A contagem dos últimos 7 dias mostra 3"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    }
+  ],
+  "coverage": {
+    "storiesWithoutScenarios": [
+      "US-001: Documento de investigação (docs/design/eventos-do-funil-fase-0.md); não há comportamento para o QA executar.",
+      "US-006: Funções puras de caminho e valor: teste unitário, fora do público deste documento. O comportamento aparece nos CT-009.5 a CT-009.9.",
+      "US-007: Funções puras de decisão de movimento: teste unitário. O comportamento aparece nos CT-010.x.",
+      "US-012: Prova do mantenedor pelo MCP direto, com tabela anexada ao PR. Os CT-008 a CT-011 refazem essa prova como cenários.",
+      "US-018: Prova do mantenedor pela tela (spec Playwright e evidência). Os CT-016 e CT-017 refazem essa prova como cenários.",
+      "US-019: Entrega documental (nota de versão e guia da Bella Capri), conferida por pnpm release:conferir e por revisão."
+    ],
+    "requirementsWithoutScenarios": [],
+    "outOfScope": [
+      "Evento de cancelamento ou perda pelo navegador; etapa de perda como destino (coberto só como recusa: CT-014.6).",
+      "Modelo pronto / «aplicar modelo»: o cadastro é sempre à mão (CT-002.4 confere que nada nasce semeado).",
+      "Mostrar o nome do evento no lugar de «Registro de uma integração» na linha do tempo.",
+      "Teto máximo para o valor da venda (decisão do dono; CT-009.9 confere que não há).",
+      "Alterar o comportamento de crm_add_lead_events ou crm_move_lead_stage (CT-011.3 confere que a primeira não mudou).",
+      "Eventos por perfil de usuário e permissão por evento."
+    ],
+    "undocumentedBehaviour": [],
+    "blockedByOpenQuestions": [
+      "Evento com campo do valor cadastrado, mas sem esse campo no envio: a especificação não diz se é recusado (valor_invalido) ou registrado sem valor. Sem cenário até decidir.",
+      "Resultado de um event_id já gravado por queda anterior: a tabela de resultados diz que «repetido» não faz mais nada, e o algoritmo diz que estado e valor ainda são aplicados. O CT-009.11 só afirma o estado final do card.",
+      "Aviso de valor muito acima da média (pergunta em aberto 1 do PRD): fora das histórias.",
+      "Contagem dos últimos 7 dias: usa a hora do evento (at) ou a hora do recebimento? Sem cenário de borda até decidir.",
+      "Retenção: apagada a atividade, o mesmo event_id volta a ser aceito (pergunta 7 do PRD): comportamento a documentar, não a testar."
+    ]
+  }
+}

@@ -1,0 +1,1180 @@
+{
+  "feature": "eventos-do-funil-webhook",
+  "generatedFrom": {
+    "prd": "docs/ralph/prd.json",
+    "prdMarkdown": "docs/ralph/prds/prd-eventos-do-funil.md",
+    "design": [
+      "docs/design/eventos-do-funil.md",
+      "docs/superpowers/specs/2026-10-29-eventos-do-funil-design.md"
+    ],
+    "prototype": null,
+    "adrs": [
+      "ADR-0007",
+      "ADR-0008",
+      "ADR-0009"
+    ],
+    "guides": [
+      "docs/integracao/rastreador-do-cardapio.md",
+      "docs/integracao/webhook-ou-rastreador.md"
+    ]
+  },
+  "etapa": "Etapa 3 · Webhook de entrada (US-031 a US-036)",
+  "ambientePadrao": [
+    {
+      "titulo": "Pré-requisito",
+      "itens": [
+        "As Etapas 1 e 2 estão aprovadas. Funil «Pedidos Bella» na organização A com as etapas Conversas · Chamar humano · Visitou o cardápio · Viu um item · Carrinho · Revisão · Compras (ganho) · Cancelado (perda) e o campo declarado «Observação» (chave observacao). {CRM} é o endereço do app.",
+        "Logado como gerente@teste.local (organização A). Atendente: atendente@teste.local."
+      ]
+    },
+    {
+      "titulo": "A fonte do webhook",
+      "itens": [
+        "Em Webhooks › Receber dados, criar a fonte «Pedidos Plataforma»: funil «Pedidos Bella», etapa padrão Compras. Anotar o endereço de recebimento: .../api/v1/webhooks/in/<TOKEN>. Cenários que mudam a fonte dizem como.",
+        "Quando um cenário falar em «reaproveitar o card aberto», ligar essa opção na fonte; ela exige assinatura: configurar o segredo da fonte e assinar os envios do jeito que a própria tela da fonte indica (cabeçalho e algoritmo)."
+      ]
+    },
+    {
+      "titulo": "Envio de exemplo",
+      "itens": [
+        "Corpo básico: {\"external_id\":\"PED-100\",\"name\":\"Cliente Webhook 01\",\"phone\":\"5511900000101\",\"pedido\":{\"total\":73.9,\"forma\":\"pix\"},\"itens\":[{\"item_id\":\"pizza-1\",\"nome\":\"Pizza grande\",\"qtd\":2}]}. Para cada cenário, trocar external_id e telefone para não colidir com envios anteriores.",
+        "Resposta esperada de sucesso: 200 com {\"data\":{\"lead_id\":\"...\"}}."
+      ]
+    },
+    {
+      "titulo": "Como conferir o resultado",
+      "itens": [
+        "Card: etapa, ganho, valor e campos (abrir o card ou GET /api/v1/leads/{lead_id}: stage, value_cents, custom_fields).",
+        "Log do webhook: Webhooks › Atividade (motivos de valor ou JSON descartados aparecem aqui).",
+        "Quantidade de cards do contato: lista de pedidos do contato ou select count(*) from crm_leads where contact_id = '<id>'.",
+        "Relatórios: arquivo .business/bellacapri/relatorios-bellacapri.sql, rodado com psql -v org=<id da organização> -f relatorios-bellacapri.sql."
+      ]
+    }
+  ],
+  "lastRun": {
+    "executedBy": null,
+    "executedAt": null,
+    "environment": null,
+    "build": null,
+    "summary": {
+      "pass": 0,
+      "fail": 0,
+      "blocked": 0,
+      "skipped": 0,
+      "pending": 34
+    }
+  },
+  "scenarios": [
+    {
+      "id": "CT-031.1",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Valor em reais vira centavos no card novo",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com campo do valor «pedido.total», unidade reais, etapa padrão Compras",
+        "Telefone 5511900000101 sem contato nem card"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo {\"external_id\":\"PED-101\",\"name\":\"Cliente Webhook 01\",\"phone\":\"5511900000101\",\"pedido\":{\"total\":73.9}}",
+        "Abrir o card criado"
+      ],
+      "expectedResult": [
+        "Resposta 200 com lead_id",
+        "O card está em Compras, ganho, com R$ 73,90 (value_cents 7390)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.2",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Unidade em centavos exige inteiro",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com campo do valor «pedido.total» e unidade centavos"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 7390 e telefone 5511900000102",
+        "Repetir com pedido.total 73.9 e telefone 5511900000103"
+      ],
+      "expectedResult": [
+        "Primeiro envio: card com value_cents 7390",
+        "Segundo envio: 200, card criado sem valor, motivo no log do webhook"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.3",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Valor ausente: o card entra sem valor e o motivo vai para o log",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com campo do valor configurado"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo sem o campo pedido (somente external_id, name e phone 5511900000104)",
+        "Abrir o card e depois Webhooks › Atividade"
+      ],
+      "expectedResult": [
+        "Resposta 200",
+        "Card criado em Compras, sem valor",
+        "O log do webhook registra o motivo (valor ausente)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.4",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Valor ilegível ou negativo não derruba o envio",
+      "layer": "integration",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com campo do valor configurado"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total «abc» e telefone 5511900000105",
+        "Repetir com pedido.total -10 e telefone 5511900000106"
+      ],
+      "expectedResult": [
+        "As duas respostas são 200",
+        "Os dois cards são criados sem valor",
+        "O log registra o motivo de cada um"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.5",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Arredondamento, zero e valor muito grande",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Fonte em reais"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 19.999 (telefone ...107)",
+        "Enviar com pedido.total 0 (telefone ...108)",
+        "Enviar com pedido.total 99999999.99 (telefone ...109)"
+      ],
+      "expectedResult": [
+        "19.999 vira 2000 centavos",
+        "0 grava valor 0",
+        "99999999.99 grava 9999999999 (sem teto)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.6",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Card reaproveitado recebe o valor antes de mudar de etapa",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Opção «reaproveitar o card aberto» ligada, com assinatura",
+        "Contato «Cliente Bella 02» (telefone 5511900000110) com pedido aberto em Revisão, sem valor, nascido no WhatsApp"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo assinado, com external_id «PED-110», phone 5511900000110 e pedido.total 59.9",
+        "Contar os cards do contato",
+        "Abrir o card"
+      ],
+      "expectedResult": [
+        "A resposta traz o MESMO lead_id do card que já existia",
+        "O contato continua com 1 só card",
+        "O card foi de Revisão para Compras, ganho, com R$ 59,90"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.7",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Reenvio idêntico não altera nada",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Estado final do CT-031.1 ou CT-031.6"
+      ],
+      "steps": [
+        "Anotar etapa, valor, campos e o número de atividades do card",
+        "Enviar o mesmo corpo de novo, com o mesmo external_id",
+        "Comparar"
+      ],
+      "expectedResult": [
+        "Resposta 200 com o mesmo lead_id",
+        "Etapa, valor, JSON e número de atividades idênticos aos anotados",
+        "Continua 1 card"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.8",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Fonte sem a configuração nova se comporta como antes",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte antiga «Pedidos Antigos» sem campo do valor e sem chave de JSON, com etapa padrão Conversas"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 73.9, itens e telefone 5511900000111"
+      ],
+      "expectedResult": [
+        "Resposta 200",
+        "Card criado em Conversas, sem valor",
+        "custom_fields não tem a lista de itens nem o bloco pedido (o aninhado é descartado, como sempre foi)"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-031.9",
+      "storyId": "US-031",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Assinatura inválida e token inexistente continuam recusando",
+      "layer": "integration",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Fonte com segredo configurado"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com assinatura errada",
+        "Enviar para um token que não existe"
+      ],
+      "expectedResult": [
+        "Assinatura errada: 401",
+        "Token inexistente: 404",
+        "Nenhum card é criado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-032.1",
+      "storyId": "US-032",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Itens e blocos aninhados são guardados como vieram",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com a chave de JSON «pedido_json»"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com pedido.total 73.9, pedido.forma «pix» e itens [{item_id: pizza-1, nome: Pizza grande, qtd: 2}] (telefone ...120)",
+        "Abrir o card e olhar custom_fields.pedido_json"
+      ],
+      "expectedResult": [
+        "custom_fields.pedido_json contém o bloco pedido e a lista itens, idênticos ao enviado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-032.2",
+      "storyId": "US-032",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Sem a configuração, o aninhado continua descartado",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com campo do valor mas SEM chave de JSON"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo o mesmo corpo do CT-032.1, telefone ...121"
+      ],
+      "expectedResult": [
+        "O card é criado",
+        "custom_fields não guarda a lista de itens nem o bloco pedido"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-032.3",
+      "storyId": "US-032",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Limite de tamanho do JSON: abaixo passa, acima é recusado no log",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com chave de JSON «pedido_json»"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com um bloco aninhado de cerca de 31 KB (telefone ...122)",
+        "Enviar outro com cerca de 33 KB (telefone ...123)",
+        "Abrir Webhooks › Atividade"
+      ],
+      "expectedResult": [
+        "31 KB: o JSON é guardado",
+        "33 KB: o card é criado SEM o JSON e o log traz o motivo (tamanho acima do limite)",
+        "Os dois envios respondem 200"
+      ],
+      "automatable": true,
+      "notes": "O limite de 32 KB vem do guia da etapa; o PRD só diz «limite de tamanho».",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-032.4",
+      "storyId": "US-032",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Lista vazia e objeto vazio",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Fonte com chave de JSON"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo com itens [] e pedido {} (telefone ...124)"
+      ],
+      "expectedResult": [
+        "Resposta 200 e card criado",
+        "Nada quebra; o card guarda o que veio (vazio) ou não guarda nada, o QA anota qual"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-032.5",
+      "storyId": "US-032",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Reenvio não altera o JSON guardado",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Card do CT-032.1"
+      ],
+      "steps": [
+        "Reenviar o mesmo corpo",
+        "Reenviar com itens diferentes e o MESMO external_id",
+        "Comparar pedido_json"
+      ],
+      "expectedResult": [
+        "No reenvio idêntico nada muda",
+        "No reenvio com itens diferentes, o comportamento é o da fonte para reenvio (o QA anota se o JSON mudou ou não)"
+      ],
+      "automatable": true,
+      "notes": "A especificação só garante o reenvio idêntico.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.1",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25",
+        "FR-26"
+      ],
+      "title": "A fonte mostra a seção «Valor e itens do pedido»",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte «Pedidos Plataforma» criada"
+      ],
+      "steps": [
+        "Abrir Webhooks › Receber dados",
+        "Abrir a fonte «Pedidos Plataforma»",
+        "Procurar a seção «Valor e itens do pedido»"
+      ],
+      "expectedResult": [
+        "A seção existe com os campos «Campo do valor do pedido» (com a unidade reais/centavos) e «Guardar os itens e os demais dados aninhados em»",
+        "Cada campo tem uma explicação em linguagem simples"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.2",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25",
+        "FR-26"
+      ],
+      "title": "Salvar e reabrir mantém os valores",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Visibilidade do estado do sistema",
+      "priority": "alta",
+      "preconditions": [
+        "Seção aberta"
+      ],
+      "steps": [
+        "Preencher o campo do valor com pedido.total e a unidade reais",
+        "Preencher o campo dos itens com pedido_json",
+        "Salvar a fonte, recarregar a página e reabrir a fonte"
+      ],
+      "expectedResult": [
+        "Os três valores continuam preenchidos"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.3",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Aviso: etapa padrão de ganho sem campo do valor",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Prevenção de erros",
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com etapa padrão Compras (ganho) e campo do valor VAZIO"
+      ],
+      "steps": [
+        "Abrir a seção «Valor e itens do pedido»"
+      ],
+      "expectedResult": [
+        "A tela mostra um aviso dizendo que a venda chegará sem valor",
+        "O aviso não impede salvar"
+      ],
+      "automatable": false,
+      "notes": "Texto exato do aviso não consta nos insumos; o QA anota o que leu.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.4",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "O aviso some quando faz sentido",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Mesma fonte, aviso visível"
+      ],
+      "steps": [
+        "Preencher o campo do valor",
+        "Em seguida, esvaziar o campo e trocar a etapa padrão para Conversas (não é de ganho)"
+      ],
+      "expectedResult": [
+        "Com o campo do valor preenchido, o aviso desaparece",
+        "Com etapa padrão que não é de ganho, o aviso também não aparece"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.5",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Aviso: a etapa padrão vale para todo envio da fonte",
+      "layer": "e2e",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": "Correspondência entre o sistema e o mundo real",
+      "priority": "media",
+      "preconditions": [
+        "Qualquer fonte aberta"
+      ],
+      "steps": [
+        "Olhar a área da etapa padrão da fonte"
+      ],
+      "expectedResult": [
+        "Há um texto explicando que a etapa padrão vale para todo envio daquela fonte"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.6",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Chave do JSON igual a campo do funil é bloqueada",
+      "layer": "e2e",
+      "type": "negativo",
+      "nfr": null,
+      "heuristic": "Ajuda para reconhecer e recuperar de erros",
+      "priority": "alta",
+      "preconditions": [
+        "O funil tem o campo «Observação» (chave observacao)"
+      ],
+      "steps": [
+        "Preencher «Guardar os itens e os demais dados aninhados em» com observacao",
+        "Tentar salvar"
+      ],
+      "expectedResult": [
+        "A tela recusa com mensagem explicando o conflito com o campo do funil",
+        "A fonte não é salva com essa chave"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.7",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-26"
+      ],
+      "title": "Esvaziar os campos volta ao comportamento antigo",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Fonte com valor e JSON configurados"
+      ],
+      "steps": [
+        "Esvaziar os dois campos e salvar",
+        "Enviar o corpo do CT-032.1 (telefone novo)"
+      ],
+      "expectedResult": [
+        "O card é criado sem valor e sem o JSON"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.8",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Texto com HTML no nome da fonte aparece como texto",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Fonte chamada «<b>x</b><img src=x onerror=alert(1)>»"
+      ],
+      "steps": [
+        "Abrir a lista de fontes e a fonte"
+      ],
+      "expectedResult": [
+        "O nome aparece literalmente, sem executar nada"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.9",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Teclado e celular",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "usabilidade",
+      "heuristic": null,
+      "priority": "baixa",
+      "preconditions": [
+        "Janela em 375 px"
+      ],
+      "steps": [
+        "Abrir a seção e conferir se cabe",
+        "Preencher os campos e salvar usando só Tab e Enter"
+      ],
+      "expectedResult": [
+        "Não há rolagem horizontal da página",
+        "Todos os controles têm foco visível e funcionam pelo teclado"
+      ],
+      "automatable": false,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-033.10",
+      "storyId": "US-033",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Atendente não altera a fonte",
+      "layer": "e2e",
+      "type": "nfr",
+      "nfr": "seguranca",
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Sessão de atendente@teste.local"
+      ],
+      "steps": [
+        "Abrir Webhooks › Receber dados e tentar editar a fonte"
+      ],
+      "expectedResult": [
+        "Não há como salvar mudanças (acesso negado, somente leitura ou seção oculta)"
+      ],
+      "automatable": false,
+      "notes": "Comportamento exato não está nos insumos; o QA anota o que viu.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-034.1",
+      "storyId": "US-034",
+      "requirements": [
+        "FR-27"
+      ],
+      "title": "O relatório separa os cards por origem",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "3 cards: um nascido no WhatsApp ainda em Conversas, um nascido no WhatsApp e ganho, e um nascido pelo webhook já ganho (CT-031.1)"
+      ],
+      "steps": [
+        "Rodar psql -v org=<id da organização A> -f .business/bellacapri/relatorios-bellacapri.sql",
+        "Procurar nas consultas de funil e de conversão a coluna origem"
+      ],
+      "expectedResult": [
+        "As consultas trazem uma coluna origem com os valores whatsapp, webhook e (para card sem origem) outros",
+        "A linha webhook mostra 1 card ganho; a linha whatsapp mostra 2 cards, 1 ganho"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-034.2",
+      "storyId": "US-034",
+      "requirements": [
+        "FR-27"
+      ],
+      "title": "A conversão da conversa à compra não conta o card do webhook",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Mesmos dados do CT-034.1"
+      ],
+      "steps": [
+        "Ler a taxa de conversão da conversa à compra do relatório, linha whatsapp"
+      ],
+      "expectedResult": [
+        "A taxa é 1 compra em 2 conversas (50%), sem contar o card do webhook"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-034.3",
+      "storyId": "US-034",
+      "requirements": [
+        "FR-27"
+      ],
+      "title": "O arquivo roda só com -v org, sem outros parâmetros",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Nenhuma variável além de org definida"
+      ],
+      "steps": [
+        "Rodar psql -v org=<id> -f relatorios-bellacapri.sql sem nenhum outro -v"
+      ],
+      "expectedResult": [
+        "Todas as consultas rodam sem erro de variável não definida"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-034.4",
+      "storyId": "US-034",
+      "requirements": [
+        "FR-27"
+      ],
+      "title": "Rodar o relatório não deixa dado no banco",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Contar linhas de crm_leads e crm_lead_activities da organização antes"
+      ],
+      "steps": [
+        "Rodar o relatório",
+        "Contar de novo"
+      ],
+      "expectedResult": [
+        "As contagens são idênticas antes e depois"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-034.5",
+      "storyId": "US-034",
+      "requirements": [
+        "FR-27"
+      ],
+      "title": "Sem nenhum card do webhook, a conversão do WhatsApp não muda",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Organização com apenas cards nascidos no WhatsApp"
+      ],
+      "steps": [
+        "Rodar o relatório"
+      ],
+      "expectedResult": [
+        "Não há linha webhook (ou ela vem zerada)",
+        "A taxa da linha whatsapp é a mesma que o relatório antigo mostrava para essa organização"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-035.1",
+      "storyId": "US-035",
+      "requirements": [
+        "FR-25",
+        "FR-26"
+      ],
+      "title": "Cliente novo: card em Compras com valor e JSON",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Fonte com valor «pedido.total» em reais e JSON em «pedido_json»; telefone 5511900000130 sem contato"
+      ],
+      "steps": [
+        "enviar POST {CRM}/api/v1/webhooks/in/<TOKEN> com Content-Type: application/json e o corpo {\"external_id\":\"PED-130\",\"name\":\"Cliente Novo\",\"phone\":\"5511900000130\",\"pedido\":{\"total\":73.9,\"forma\":\"pix\"},\"itens\":[{\"item_id\":\"pizza-1\",\"qtd\":2}]}"
+      ],
+      "expectedResult": [
+        "Um contato e um card são criados",
+        "O card está em Compras, ganho, R$ 73,90, com pedido_json guardado"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-035.2",
+      "storyId": "US-035",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Cliente da Bella em Revisão fecha em um envio, sem duplicar",
+      "layer": "integration",
+      "type": "sucesso",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Opção «reaproveitar o card aberto» ligada, com assinatura",
+        "Contato com pedido aberto em Revisão, nascido no WhatsApp (origem whatsapp)"
+      ],
+      "steps": [
+        "Enviar o pedido finalizado assinado com o telefone desse contato e pedido.total 59.9",
+        "Contar os cards do contato e abrir o card"
+      ],
+      "expectedResult": [
+        "Continua 1 só card",
+        "Ele foi para Compras, ganho, com R$ 59,90 e JSON",
+        "A origem do card continua whatsapp"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-035.3",
+      "storyId": "US-035",
+      "requirements": [
+        "FR-25"
+      ],
+      "title": "Contato conhecido sem card aberto recebe um card novo",
+      "layer": "integration",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "media",
+      "preconditions": [
+        "Contato com um card antigo já ganho e nenhum aberto"
+      ],
+      "steps": [
+        "Enviar um pedido finalizado com o telefone desse contato"
+      ],
+      "expectedResult": [
+        "O contato passa a ter 2 cards: o antigo intacto e um novo em Compras com o valor do envio"
+      ],
+      "automatable": true,
+      "notes": "",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-036.1",
+      "storyId": "US-036",
+      "requirements": [
+        "FR-25",
+        "FR-21"
+      ],
+      "title": "Mesma compra pelo rastreador e depois pelo webhook gera dois cards",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Etapa 2 pronta (chave e página de teste)",
+        "Cliente com pedido aberto em Revisão, com carrinho gravado",
+        "Opção «reaproveitar o card aberto» ligada"
+      ],
+      "steps": [
+        "Pela página de teste (?idtrack do contato), clicar em «Comprar» (order_id P-1042): o card fecha em Compras",
+        "Em seguida, enviar pelo webhook a mesma compra (mesmo telefone, valor 73.9)",
+        "Contar os cards do contato em Compras"
+      ],
+      "expectedResult": [
+        "O contato fica com DOIS cards em Compras (o fechado pelo rastreador e um novo criado pelo webhook)"
+      ],
+      "automatable": false,
+      "notes": "Limite documentado em docs/integracao/webhook-ou-rastreador.md: o produto não reconhece a mesma compra nas duas portas. O cenário existe para o QA confirmar que o comportamento é exatamente o descrito, e para a equipe decidir se muda.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    },
+    {
+      "id": "CT-036.2",
+      "storyId": "US-036",
+      "requirements": [
+        "FR-25",
+        "FR-21"
+      ],
+      "title": "Mesma compra pelo webhook e depois pelo rastreador não duplica o card",
+      "layer": "e2e",
+      "type": "alternativo",
+      "nfr": null,
+      "heuristic": null,
+      "priority": "alta",
+      "preconditions": [
+        "Cliente com pedido aberto em Revisão",
+        "Opção «reaproveitar o card aberto» ligada"
+      ],
+      "steps": [
+        "Enviar pelo webhook a compra (valor 73.9): o card fecha em Compras",
+        "Pela página de teste (?idtrack do contato), clicar em «Comprar»",
+        "Contar os cards do contato e olhar o valor"
+      ],
+      "expectedResult": [
+        "Continua 1 só card em Compras com R$ 73,90",
+        "O valor não dobra"
+      ],
+      "automatable": false,
+      "notes": "O guia diz que a compra do navegador «só registra o evento» e que o histórico mostra a compra duas vezes; isso depende da pergunta em aberto sobre pedido encerrado (ver coverage.blockedByOpenQuestions). O QA anota se a compra do navegador apareceu na linha do tempo.",
+      "execution": {
+        "result": "pending",
+        "description": "",
+        "executedBy": null,
+        "executedAt": null
+      }
+    }
+  ],
+  "coverage": {
+    "storiesWithoutScenarios": [
+      "US-036: A parte documental (nota de versão e guia com a tabela «quando usar cada porta») é conferida por pnpm release:conferir e por revisão; só o comportamento de duplicidade entre as duas portas virou cenário (CT-036.1 e CT-036.2)."
+    ],
+    "requirementsWithoutScenarios": [],
+    "outOfScope": [
+      "Aplicar o campo stage do JSON do webhook na criação do card: hoje só vale a etapa padrão da fonte.",
+      "Pico de envios simultâneos do mesmo external_id (a prova do mantenedor também não cobre).",
+      "Fonte sem assinatura com «reaproveitar o card aberto» ligado (só liga com assinatura)."
+    ],
+    "undocumentedBehaviour": [],
+    "blockedByOpenQuestions": [
+      "Pergunta 5 do PRD: compra duplicada entre rastreador e webhook. O CT-036.1 documenta o comportamento atual; se a regra mudar, o cenário muda.",
+      "Pergunta 6 do PRD: um aviso por tipo de pedido (a fonte hoje leva todo envio à mesma etapa). Fora deste conjunto.",
+      "Pedido encerrado e rastreador (mesma dúvida do conjunto do Rastreador): decide o resultado esperado do CT-036.2."
+    ]
+  }
+}
