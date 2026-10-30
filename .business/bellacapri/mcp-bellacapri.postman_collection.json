@@ -1181,6 +1181,363 @@
           ]
         }
       ]
+    },
+    {
+      "name": "5 · Eventos cadastrados (crm_track_event)",
+      "item": [
+        {
+          "name": "5.0 · crm_list_pipeline_events (quais eventos o funil aceita)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 20,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_list_pipeline_events\",\n    \"arguments\": {\n      \"pipeline_id\": \"{{pipeline_id}}\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Lista os eventos CADASTRADOS no funil (Configurações › Funis › «Para onde o card vai em cada evento»): chave, etapa de destino (pelo NOME), 'guardar em', campo do valor, repetição e se está ativo. Leitura (mcp:read).\n\nSe a lista vier vazia, o funil não aceita nenhum evento: cadastre-os na tela antes de usar crm_track_event."
+          },
+          "response": []
+        },
+        {
+          "name": "5.1 · page_view (só registra)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 21,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"page_view\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"screen_name\": \"home\"\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Entrou numa página. Cadastro sugerido: destino «Não mover». Resposta esperada: resultado 'registrado', movimento 'sem_destino'.\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 · view_item (só registra)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 22,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"view_item\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"item_id\": \"pizza-calabresa\",\n            \"item_name\": \"Pizza Calabresa\",\n            \"price\": 59.9\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Viu um produto. Cadastro sugerido: destino «Não mover».\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 · cart_sync (→ Carrinho, valor do negócio)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 23,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"cart_sync\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"items\": [\n              {\n                \"item_id\": \"pizza-calabresa\",\n                \"item_name\": \"Pizza Calabresa\",\n                \"price\": 59.9,\n                \"quantity\": 2\n              },\n              {\n                \"item_id\": \"refri-2l\",\n                \"item_name\": \"Refrigerante 2L\",\n                \"price\": 12.0,\n                \"quantity\": 1\n              }\n            ],\n            \"value\": 131.8\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Carrinho mudou: mande o carrinho INTEIRO; vale o último. Cadastro sugerido: destino Carrinho, guardar em 'cart', campo do valor 'value' (reais).\n\n'value' é OBRIGATÓRIO: o CRM não soma os itens. Sem ele o evento é recusado (valor_invalido). Carrinho vazio: items [] e value 0.\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        },
+        {
+          "name": "5.4 · begin_checkout (→ Revisão, valor do negócio)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 24,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"begin_checkout\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"value\": 131.8,\n            \"item_count\": 3,\n            \"delivery_type\": \"delivery\",\n            \"coupon\": \"BELLA10\"\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Foi para o pagamento. Cadastro sugerido: destino Revisão, guardar em 'checkout', campo do valor 'value' (reais).\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        },
+        {
+          "name": "5.5 · purchase (→ Compras, ganho)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 25,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"purchase\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"order_id\": \"P-{{$timestamp}}\",\n            \"value\": 141.8,\n            \"delivery_type\": \"delivery\",\n            \"subtotal\": 131.8,\n            \"total\": 141.8,\n            \"shipping\": 10,\n            \"discount\": 0,\n            \"payment_method\": \"pix\",\n            \"coupon\": \"BELLA10\",\n            \"items\": [\n              {\n                \"item_id\": \"pizza-calabresa\",\n                \"item_name\": \"Pizza Calabresa\",\n                \"price\": 59.9,\n                \"quantity\": 2\n              },\n              {\n                \"item_id\": \"refri-2l\",\n                \"item_name\": \"Refrigerante 2L\",\n                \"price\": 12.0,\n                \"quantity\": 1\n              }\n            ]\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Pedido confirmado. Cadastro sugerido: destino Compras, guardar em 'pedido', campo do valor 'value' (reais), reconhecer o mesmo fato por 'order_id', e «Respeitar o que a equipe moveu à mão» DESLIGADO.\n\nO mesmo order_id com outro event_id volta 'repetido' e não faz mais nada. Pelo servidor (este token) a compra fecha o pedido sem exigir carrinho antes; pelo NAVEGADOR (rastreador) isso é exigido.\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        },
+        {
+          "name": "5.6 · lote completo (os 5 eventos numa chamada)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 26,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"page_view\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"screen_name\": \"home\"\n          }\n        },\n        {\n          \"event\": \"view_item\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"item_id\": \"pizza-calabresa\",\n            \"item_name\": \"Pizza Calabresa\",\n            \"price\": 59.9\n          }\n        },\n        {\n          \"event\": \"cart_sync\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"items\": [\n              {\n                \"item_id\": \"pizza-calabresa\",\n                \"item_name\": \"Pizza Calabresa\",\n                \"price\": 59.9,\n                \"quantity\": 2\n              },\n              {\n                \"item_id\": \"refri-2l\",\n                \"item_name\": \"Refrigerante 2L\",\n                \"price\": 12.0,\n                \"quantity\": 1\n              }\n            ],\n            \"value\": 131.8\n          }\n        },\n        {\n          \"event\": \"begin_checkout\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"value\": 131.8,\n            \"item_count\": 3,\n            \"delivery_type\": \"delivery\"\n          }\n        },\n        {\n          \"event\": \"purchase\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"order_id\": \"P-{{$timestamp}}\",\n            \"value\": 141.8,\n            \"delivery_type\": \"delivery\",\n            \"payment_method\": \"pix\",\n            \"items\": [\n              {\n                \"item_id\": \"pizza-calabresa\",\n                \"item_name\": \"Pizza Calabresa\",\n                \"price\": 59.9,\n                \"quantity\": 2\n              },\n              {\n                \"item_id\": \"refri-2l\",\n                \"item_name\": \"Refrigerante 2L\",\n                \"price\": 12.0,\n                \"quantity\": 1\n              }\n            ]\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Até 50 eventos por chamada, do mais antigo ao mais novo; a chamada inteira conta UMA escrita no teto do token (30/min). O pedido nunca retrocede e, depois de Compras, não muda mais. Resposta: cinco resultados na ordem, cada um com estado/valor/movimento/etapa.\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        },
+        {
+          "name": "E4 · evento NÃO cadastrado (resultado 'recusado', não isError)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{mcp_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json, text/event-stream",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 27,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"crm_track_event\",\n    \"arguments\": {\n      \"lead_id\": \"{{lead_id}}\",\n      \"events\": [\n        {\n          \"event\": \"add_to_cart\",\n          \"event_id\": \"{{$guid}}\",\n          \"data\": {\n            \"x\": 1\n          }\n        }\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/mcp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "mcp"
+              ]
+            },
+            "description": "Esperado: HTTP 200, result SEM isError, e o resultado do evento 'recusado' com codigo 'evento_nao_cadastrado' e a lista das chaves ativas do funil. Nada é gravado. NÃO reenviar.\n\nFERRAMENTA ESTRITA: só aceita evento cadastrado e ativo no funil do pedido. Um resultado POR evento (registrado | repetido | recusado) na ordem enviada; recusa de um evento não derruba os outros. event_id é OBRIGATÓRIO (aqui {{$guid}}: cada envio é um fato novo; repetir o MESMO event_id devolve 'repetido'). Valores em reais, com PONTO. Campo vazio: omita a chave.\n\nA RECUSA É DEFINITIVA: não reenvie o mesmo evento esperando outro resultado."
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [

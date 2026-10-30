@@ -54,7 +54,7 @@ em **Conversas** e todas as etapas seguintes são movidas pelo **cardápio digit
 | 1 | **Conversas** | — | nasce aqui (conversa iniciada pelo cliente ou pela plataforma) | etapa de entrada |
 | 2 | **Visitas** | `page_view` | cardápio | — |
 | 3 | **Visualizações** | `view_item` | cardápio | — |
-| 4 | **Carrinho** | `add_to_cart` | cardápio | — |
+| 4 | **Carrinho** | `cart_sync` | cardápio | — |
 | 5 | **Revisão** | `begin_checkout` | cardápio | — |
 | 6 | **Compras** | `purchase` | cardápio | **ganhou** |
 | 7 | **Chamar Humano** | — | passagem para humano (slug `chamar-humano`) | — |
@@ -109,9 +109,17 @@ Motivos de perda próprios da Bella Capri: **pendente** (campo em branco por dec
 
 ## 6. Integração do cardápio digital (decisão tomada, detalhes em aberto)
 
+> **Atualização de 29/10/2026 (feature "Eventos do funil").** Os cinco eventos agora são **cadastrados à mão no funil**
+> (Configurações › Funis › «Para onde o card vai em cada evento») e entram por uma operação só, que registra, guarda o
+> estado, aplica o valor e move a etapa sem retroceder: `crm_track_event` (servidor, com token) **ou** o rastreador no
+> site do cardápio (navegador, chave pública; manual para o time em `manual-rastreador-cardapio.md`). Detalhe e tabela de
+> cadastro em `integracao-mcp-cardapio.md`, seção 5-A. Quando a compra também chegar por webhook, escolha **uma** porta
+> (`docs/integracao/webhook-ou-rastreador.md`). O desenho abaixo (registrar + atualizar + mover, com a trava de níveis no
+> cardápio) continua funcionando e está na seção 5-B do mesmo guia.
+>
 > **Fonte de verdade atual: `integracao-mcp-cardapio.md`** (mais `mcp-bellacapri.postman_collection.json`,
 > `mcp-requests-postman.curl.txt` e `relatorios-bellacapri.sql`). As anotações históricas abaixo ficam como registro
-> das decisões, mas o desenho vigente é: `page_view` e `view_item` são **registros que só crescem**
+> das decisões, mas o desenho ANTERIOR era: `page_view` e `view_item` são **registros que só crescem**
 > (`crm_add_lead_events`, em lote, com `at` e `event_id`); `cart_sync`, `begin_checkout` e `purchase` são **estado**
 > (`crm_update_lead`, JSON em `custom_fields.cart` / `checkout` / `pedido`); o pedido **não retrocede** (níveis 1 a 5,
 > Chamar Humano fora); a ficha declara **9** campos. `crm_add_lead_events` está na `main` local

@@ -300,6 +300,11 @@ na tela, os eventos que o funil aceita e para onde o pedido vai quando cada um c
 aconteceu, numa ferramenta só: `crm_track_event`. O CRM grava no histórico, guarda o último conteúdo, aplica o valor e
 move o pedido, e **nunca o faz retroceder**.
 
+> **Pelo navegador em vez do servidor.** Os mesmos cinco eventos podem ser contados por um script colado no site do
+> cardápio (chave pública, sem token secreto), com as travas de segurança do navegador. O manual para o time do cardápio
+> é o `manual-rastreador-cardapio.md`, nesta pasta. Escolha **uma** porta para a compra: o CRM não percebe a mesma
+> compra chegando pelas duas.
+
 **Cadastro (uma vez por loja):** `/app/settings/tenant/pipelines` › o funil **Pedidos** › seção **Para onde o card vai em
 cada evento** › **Cadastrar um evento**. Nada vem pronto: cadastre à mão os cinco abaixo. Opções avançadas ficam
 escondidas atrás de «Mostrar as opções avançadas».
