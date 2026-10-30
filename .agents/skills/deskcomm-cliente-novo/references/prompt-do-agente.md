@@ -35,7 +35,7 @@ vocabulário interno, agenda sem ferramenta, aviso de IA. O veto volta ao modelo
 - "Resuma o atendimento no fim", "leia o histórico antes de perguntar de novo", "que dia é hoje"
   — já vêm no contexto de cada turno.
 - Preço e prazo em texto quando existe catálogo ou base de conhecimento — duas fontes divergem.
-- Placeholders `{{assim}}` — o motor não substitui; ele injeta o contexto por conta própria.
+- Placeholders `{{assim}}` — o motor não substitui; ele injeta o contexto por conta própria. **única exceção:** `{{id_do_contato}}`, que o motor preenche no envio com o código do contato (serve para montar o link de um cardápio ou página externa que reconhece o cliente por ele, como `https://loja.exemplo/?idtrack={{id_do_contato}}`). O valor vem do atendimento em curso, nunca do texto do modelo; nenhum outro `{{...}}` é tocado.
 
 ## Esqueleto (preencha com a triagem; tire seções vazias)
 

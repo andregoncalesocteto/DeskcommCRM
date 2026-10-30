@@ -38,7 +38,7 @@ tom, tamanho, uma pergunta por vez; o que registrar para o retorno.
 | "a equipe vai verificar e retorna" sem abrir caso | veto de promessa sem caso | "se precisar de uma pessoa, abra um caso e diga que alguém retorna" (o motor exige o caso) |
 | desconto ou prazo no prompt acima da tabela de promessas | veto de promessa | alinhe com a tabela; sem tabela, o portão não age — crie a tabela |
 | preço e prazo em texto quando há catálogo/materiais | duas fontes de verdade; o modelo escolhe uma | "consulte os materiais antes de responder preço, prazo, política" |
-| `{{nome}}`, `{{empresa}}` | o motor não substitui placeholders; injeta contexto por conta própria | texto direto |
+| `{{nome}}`, `{{empresa}}` | o motor não substitui placeholders; injeta contexto por conta própria. **Única exceção: `{{id_do_contato}}`**, que o motor preenche no envio com o código do contato (o valor vem do atendimento, não do modelo) | texto direto; use `{{id_do_contato}}` só para montar o link de um cardápio ou página externa que reconhece o cliente por ele (`...?idtrack={{id_do_contato}}`) |
 | "resuma no fim", "leia o histórico antes de repetir a pergunta", "que dia é hoje" | já vem no contexto de cada turno | corte |
 | um único bloco de 3 mil palavras | custo dobrado por turno, atenção diluída | mova conteúdo situacional para skills do produto (corpo só entra no assunto) |
 | instruir "mover o lead" num agente sem funil na versão | capacidade que o agente não tem naquele turno | confira `pipeline_ids` e capacidades da versão antes de instruir |
@@ -52,7 +52,7 @@ tom, tamanho, uma pergunta por vez; o que registrar para o retorno.
 5. Capacidades pelo que fazem; nenhuma pelo nome.
 6. Limites por situação; passagem para humano por situação, não por pessoa.
 7. Estilo: tamanho, uma pergunta, emoji.
-8. Nada que seja portão do motor; nada com jargão; nada com placeholder.
+8. Nada que seja portão do motor; nada com jargão; nada com placeholder (exceto `{{id_do_contato}}` num link para sistema externo).
 9. Tamanho: cabe em uma tela? Se não, o que vai para skill do produto?
 
 ## Skills do produto — o lugar do conteúdo condicional

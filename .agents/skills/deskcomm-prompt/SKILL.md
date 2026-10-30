@@ -86,5 +86,5 @@ anterior em segundos.
 - Não publica sem a pessoa ver o antes/depois.
 - Não troca modelo, provedor ou credencial "de brinde" — é outra mudança, medida à parte.
 - Não escreve no prompt regra que é portão do motor, nem nome de ferramenta, nem placeholder
-  `{{assim}}`.
+  `{{assim}}` (a única exceção é `{{id_do_contato}}`, preenchido pelo motor; ver o catálogo de antipadrões).
 - Não conclui pela conversa de um cliente só. Uma frase ruim é anedota; padrão é dado.

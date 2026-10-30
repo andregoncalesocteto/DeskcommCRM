@@ -34,6 +34,15 @@ qualificando, qualificado, negociando, ganhou, perdeu) — é o mapa que deixa o
 etapa sem passo o agente não usa. Vocabulário (como chamar cliente/negócio/ganhou/perdeu) e
 motivos de perda ficam na configuração do funil. O primeiro funil ativo vira o padrão.
 
+**Só se o cliente tem um cardápio, loja ou site que conta o que o cliente faz fora do WhatsApp:** na mesma tela do
+funil, a seção **«Para onde o card vai em cada evento»** (cadastre à mão cada evento: chave, etapa de destino, onde
+guardar o conteúdo, campo do valor, como reconhecer o mesmo fato) e, para um site, **«Rastreador para o site do
+cardápio»** (cria a chave pública, lista os sites autorizados, copia o código). Para a plataforma que avisa o
+pedido finalizado por webhook, **Webhooks › a fonte › «Valor e itens do pedido»**. Nada vem cadastrado, e a
+compra deve chegar por **uma** porta só. Passo a passo: `docs/integracao/rastreador-do-cardapio.md` e
+`docs/integracao/webhook-ou-rastreador.md` no repositório. O agente monta o link do cardápio com
+`?idtrack={{id_do_contato}}`.
+
 ## 5. IA › Conhecimento ("O que o agente sabe")
 
 **Adicionar material** → tipo: *FAQ* (pares pergunta/resposta — cole em markdown com
