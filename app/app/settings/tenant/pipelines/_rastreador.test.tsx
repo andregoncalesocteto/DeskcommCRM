@@ -219,6 +219,25 @@ describe("a seção", () => {
     expect(screen.queryByTestId("revogar-k-1")).toBeNull();
   });
 
+  it("⭐ excluir as revogadas pede confirmação e só então chama a API; sem revogada, o botão nem aparece", async () => {
+    servir([chave(), chave({ id: "k-2", is_active: false, revoked_at: "2026-10-29T11:00:00Z" })]);
+    vi.mocked(apiClient.delete).mockResolvedValue({ data: { excluidas: 1 } });
+    const u = userEvent.setup();
+    montar();
+    await u.click(await screen.findByTestId("excluir-revogadas-botao"));
+    expect(apiClient.delete).not.toHaveBeenCalled();
+    expect(screen.getByTestId("aviso-excluir-revogadas")).toHaveTextContent("somem da lista de vez");
+    await u.click(screen.getByTestId("confirmar-excluir-revogadas"));
+    await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith(ROTA));
+  });
+
+  it("só chaves ativas: não oferece excluir", async () => {
+    servir([chave()]);
+    montar();
+    await screen.findByTestId("copiar-k-1");
+    expect(screen.queryByTestId("excluir-revogadas")).toBeNull();
+  });
+
   it("falha ao ler: mensagem simples, sem quebrar a tela", async () => {
     vi.mocked(apiClient.get).mockRejectedValue(new Error("boom"));
     montar();

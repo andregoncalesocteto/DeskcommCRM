@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { AuthUser } from "@/lib/auth/types";
 import { criarBancoFalso, type Linha } from "../../../../../../tests/helpers/banco-falso-de-eventos";
 
-import { GET, POST } from "./route";
+import { DELETE, GET, POST } from "./route";
 
 /**
  * GET/POST /api/v1/pipelines/[id]/tracker-keys — as chaves públicas do rastreador.
@@ -211,6 +211,73 @@ describe("POST /pipelines/[id]/tracker-keys", () => {
     const { t } = banco();
     const antes = t.crm_tracker_public_keys.length;
     expect((await POST(post(corpo), ctx)).status).toBe(403);
+    expect(t.crm_tracker_public_keys.length).toBe(antes);
+    expect(requireRole).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /pipelines/[id]/tracker-keys — excluir as revogadas", () => {
+  const apagar = (funil = FUNIL) =>
+    DELETE(new NextRequest("http://localhost/x", { method: "DELETE" }), { params: Promise.resolve({ id: funil }) });
+  const revogada = (id: string, extra: Linha = {}) => chave(id, { is_active: false, revoked_at: "2026-10-02T10:00:00Z", ...extra });
+
+  function comRevogadas() {
+    const t = tabelas();
+    t.crm_tracker_public_keys.push(
+      revogada("r1"),
+      revogada("r2"),
+      revogada("r3", { organization_id: OUTRA_ORG, pipeline_id: FUNIL_ALHEIO }),
+      revogada("r4", { pipeline_id: "outro-funil-da-mesma-org" }),
+    );
+    return banco(t);
+  }
+
+  it("⭐ apaga SÓ as revogadas deste funil: ativa, outro funil e outra organização ficam", async () => {
+    const { t } = comRevogadas();
+    const r = await apagar();
+    expect(r.status).toBe(200);
+    expect((await r.json()).data.excluidas).toBe(2);
+    expect(t.crm_tracker_public_keys.map((l) => l.id).sort()).toEqual(["a", "b", "c", "r3", "r4"]);
+  });
+
+  it("audita uma vez, com as chaves que saíram", async () => {
+    comRevogadas();
+    await apagar();
+    expect(audit).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(audit).mock.calls[0]![0];
+    expect(arg.action).toBe("tracker_key.purged");
+    expect(arg.metadata).toMatchObject({ pipeline_id: FUNIL, quantidade: 2 });
+  });
+
+  it("sem nenhuma revogada: 200 com zero e nada é auditado", async () => {
+    const { t } = banco();
+    const antes = t.crm_tracker_public_keys.length;
+    const r = await apagar();
+    expect((await r.json()).data.excluidas).toBe(0);
+    expect(t.crm_tracker_public_keys.length).toBe(antes);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("funil de outra organização: 404 e nada apagado", async () => {
+    const { t } = comRevogadas();
+    const antes = t.crm_tracker_public_keys.length;
+    expect((await apagar(FUNIL_ALHEIO)).status).toBe(404);
+    expect(t.crm_tracker_public_keys.length).toBe(antes);
+  });
+
+  it("papel insuficiente: 403 e nada apagado", async () => {
+    autorizar(false);
+    const { t } = comRevogadas();
+    const antes = t.crm_tracker_public_keys.length;
+    expect((await apagar()).status).toBe(403);
+    expect(t.crm_tracker_public_keys.length).toBe(antes);
+  });
+
+  it("a guarda de suporte vem ANTES do efeito", async () => {
+    vi.mocked(requireSupportWrite).mockResolvedValue(fail("support_read_only", "Somente leitura.", 403, { requestId: "x" }) as never);
+    const { t } = comRevogadas();
+    const antes = t.crm_tracker_public_keys.length;
+    expect((await apagar()).status).toBe(403);
     expect(t.crm_tracker_public_keys.length).toBe(antes);
     expect(requireRole).not.toHaveBeenCalled();
   });

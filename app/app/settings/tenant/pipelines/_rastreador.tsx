@@ -12,6 +12,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import {
   useChavesDoRastreador,
   useCriarChave,
+  useExcluirChavesRevogadas,
   useRevogarChave,
   type ChaveDoRastreador,
 } from "@/hooks/pipelines/useChavesDoRastreador";
@@ -140,10 +141,12 @@ export function RastreadorSection({ pipelineId }: { pipelineId: string }) {
   const chaves = useChavesDoRastreador(pipelineId);
   const criar = useCriarChave(pipelineId);
   const revogar = useRevogarChave(pipelineId);
+  const excluirRevogadas = useExcluirChavesRevogadas(pipelineId);
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<string | null>(null);
   const [verCodigo, setVerCodigo] = useState<string | null>(null);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
 
   if (chaves.isError) {
     return (
@@ -160,6 +163,7 @@ export function RastreadorSection({ pipelineId }: { pipelineId: string }) {
     );
   }
 
+  const revogadas = chaves.data.filter((c) => !c.is_active).length;
   const enderecoDoCrm = typeof window === "undefined" ? "" : window.location.origin;
 
   async function copiar(c: ChaveDoRastreador) {
@@ -300,6 +304,43 @@ export function RastreadorSection({ pipelineId }: { pipelineId: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {revogadas > 0 && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="excluir-revogadas">
+          {confirmandoExclusao ? (
+            <>
+              <p className="text-xs text-text-muted" data-testid="aviso-excluir-revogadas">
+                {t("As chaves revogadas somem da lista de vez. O histórico dos eventos que elas trouxeram continua nos pedidos.")}
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={excluirRevogadas.isPending}
+                data-testid="confirmar-excluir-revogadas"
+                onClick={() =>
+                  excluirRevogadas.mutate(undefined, {
+                    onSuccess: () => {
+                      setConfirmandoExclusao(false);
+                      toast.success(t("Chaves revogadas excluídas."));
+                    },
+                    onError: (e) => toast.error(mensagemDeErro(e, t)),
+                  })
+                }
+              >
+                {t("Sim, excluir")}
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmandoExclusao(false)}>
+                {t("Cancelar")}
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmandoExclusao(true)} data-testid="excluir-revogadas-botao">
+              {t("Excluir chaves revogadas")} ({revogadas})
+            </Button>
+          )}
+        </div>
       )}
 
       {criando ? (

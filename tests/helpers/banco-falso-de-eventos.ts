@@ -37,6 +37,7 @@ export function criarBancoFalso(tabelas: Record<string, Linha[]>, opcoes: Opcoes
   function from(tabela: string) {
     const filtros: Array<[string, unknown]> = [];
     const maiorOuIgual: Array<[string, string]> = [];
+    const naoNulos: string[] = [];
     let emIn: [string, unknown[]] | null = null;
     let ordem: { coluna: string; crescente: boolean } | null = null;
     let teto: number | null = null;
@@ -48,6 +49,7 @@ export function criarBancoFalso(tabelas: Record<string, Linha[]>, opcoes: Opcoes
       (tabelas[tabela] ??= []).filter(
         (l) =>
           filtros.every(([c, v]) => valorDa(l, c) === v) &&
+          naoNulos.every((c) => valorDa(l, c) != null) &&
           maiorOuIgual.every(([c, v]) => String(valorDa(l, c)) >= v) &&
           (!emIn || emIn[1].includes(valorDa(l, emIn[0]))),
       );
@@ -112,6 +114,11 @@ export function criarBancoFalso(tabelas: Record<string, Linha[]>, opcoes: Opcoes
       // `.is(coluna, null)`: o banco compara com NULL; aqui, igualdade com o valor (ausente conta como null).
       is: (c: string, v: unknown) => {
         filtros.push([c, v]);
+        return b;
+      },
+      // `.not(coluna, "is", null)`: só a forma "não é nulo", a única que os testes usam.
+      not: (c: string, _op: string, _v: null) => {
+        naoNulos.push(c);
         return b;
       },
       gte: (c: string, v: string) => {

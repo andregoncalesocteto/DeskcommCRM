@@ -56,3 +56,11 @@ export function useRevogarChave(pipelineId: string) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: chaveDasChaves(pipelineId) }),
   });
 }
+
+export function useExcluirChavesRevogadas(pipelineId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.delete<{ data: { excluidas: number } }>(rota(pipelineId)).then((r) => r.data.excluidas),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: chaveDasChaves(pipelineId) }),
+  });
+}
