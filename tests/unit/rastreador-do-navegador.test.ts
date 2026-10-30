@@ -3,14 +3,14 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * O SCRIPT DO RASTREADOR (`public/rastreador.js`) num navegador simulado.
+ * O SCRIPT DO RASTREADOR (`public/rastreador/v1.js`) num navegador simulado.
  *
  * O arquivo é executado de verdade, com uma `window` de mentira que registra tudo o que ele faz: requisições, beacons,
  * armazenamento e avisos no console. O tempo é o do vitest (relógio falso), então "a cada 3 segundos" é medido, não
  * suposto. Nada aqui lê o código do script: o que se afirma é comportamento observável.
  */
 
-const FONTE = readFileSync("public/rastreador.js", "utf8");
+const FONTE = readFileSync("public/rastreador/v1.js", "utf8");
 const CHAVE = `pk_${"a1".repeat(18)}`;
 const IDTRACK = "6a3a1d29-e054-4f33-b406-dcb90ff9c948";
 const ENDPOINT = "https://crm.exemplo";
@@ -58,7 +58,7 @@ function montar(o: Opcoes = {}) {
   let n = 0;
   const w: Record<string, unknown> = {
     document: {
-      currentScript: { src: `${ENDPOINT}/rastreador.js` },
+      currentScript: { src: `${ENDPOINT}/rastreador/v1.js` },
       visibilityState: "visible",
       addEventListener: (nome: string, f: () => void) => (eventosDoDocumento[nome] ??= []).push(f),
     },

@@ -41,12 +41,12 @@ Cole **uma vez**, dentro do `<head>` de todas as páginas do cardápio (ou no HT
 ```html
 <script>
 (function(w,d,s){w.rastreador=w.rastreador||function(){(w.rastreador.q=w.rastreador.q||[]).push([].slice.call(arguments))};
-var e=d.createElement("script");e.async=1;e.src=s;d.head.appendChild(e)})(window,document,"<ENDERECO_DO_CRM>/rastreador.js");
+var e=d.createElement("script");e.async=1;e.src=s;d.head.appendChild(e)})(window,document,"<ENDERECO_DO_CRM>/rastreador/v1.js");
 rastreador("init",{key:"<CHAVE_PUBLICA>",endpoint:"<ENDERECO_DO_CRM>"});
 </script>
 ```
 
-- O trecho carrega o arquivo `rastreador.js` do CRM sem travar a página e já deixa a função `rastreador(...)` disponível.
+- O trecho carrega o arquivo `rastreador/v1.js` do CRM sem travar a página e já deixa a função `rastreador(...)` disponível.
   Chamadas feitas antes de o arquivo terminar de carregar ficam em fila e são executadas depois.
 - O script **não tem dependências** e **nunca lança erro** para a página: se algo falhar, o cardápio continua funcionando.
 - Para depurar durante o desenvolvimento, use `rastreador("init",{key:"<CHAVE_PUBLICA>",endpoint:"<ENDERECO_DO_CRM>",debug:true})`

@@ -1081,7 +1081,7 @@
         "App no ar"
       ],
       "steps": [
-        "Abrir {CRM}/rastreador.js no navegador",
+        "Abrir {CRM}/rastreador/v1.js no navegador",
         "Abrir cardapio-teste.html?idtrack=<ID_C1> com a aba Network aberta e recarregar"
       ],
       "expectedResult": [

@@ -214,7 +214,7 @@ test.describe("Rastreador no site do cardápio — da chave pela tela ao pedido 
     const codigo = secao.locator(`[data-testid="codigo-${chaveId}"] pre`).first();
     trecho = await codigo.innerText();
     expect(trecho).toContain("pk_");
-    expect(trecho).toContain("/rastreador.js");
+    expect(trecho).toContain("/rastreador/v1.js");
     await captura(page, "01-chave-e-codigo");
 
     // Agora sim: a página do cardápio, com o código COPIADO DA TELA, na porta que a chave autoriza.

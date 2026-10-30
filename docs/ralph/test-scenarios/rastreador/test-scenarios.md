@@ -624,7 +624,7 @@
 - App no ar
 
 **Steps para reproduzir:**
-1. Abrir {CRM}/rastreador.js no navegador
+1. Abrir {CRM}/rastreador/v1.js no navegador
 2. Abrir cardapio-teste.html?idtrack=<ID_C1> com a aba Network aberta e recarregar
 
 **Resultado esperado:**

@@ -40,7 +40,7 @@ export function trechoDeInstalacao(enderecoDoCrm: string, chave: string): string
     "<script>",
     "(function(w,d,s){w.rastreador=w.rastreador||function(){(w.rastreador.q=w.rastreador.q||[]).push([].slice.call(arguments))};" +
       'var e=d.createElement("script");e.async=1;e.src=s;d.head.appendChild(e)})' +
-      `(window,document,"${base}/rastreador.js");`,
+      `(window,document,"${base}/rastreador/v1.js");`,
     `rastreador("init",{key:"${chave}",endpoint:"${base}"});`,
     "</script>",
   ].join("\n");

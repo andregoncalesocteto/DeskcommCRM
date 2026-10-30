@@ -92,7 +92,7 @@
       "lane": "portas",
       "col": 4,
       "type": "frontend",
-      "label": "public/rastreador.js",
+      "label": "public/rastreador/v1.js",
       "sublabel": "fila em lote; sem dados pessoais; idtrack validado"
     },
     {

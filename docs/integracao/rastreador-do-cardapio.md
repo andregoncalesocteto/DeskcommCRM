@@ -88,4 +88,4 @@ O código roda na máquina do visitante, que pode alterá-lo. Por isso:
 | «Muitas requisições» | A porta limita por visitante (60 por minuto) e por chave (1.200 por minuto) |
 | A compra aparece no histórico e o pedido não foi a Compras | Faltou um evento de estado antes (carrinho ou pagamento), ou o pedido já estava encerrado |
 
-Fonte do script: `public/rastreador.js` (sem dependência). Desenho: [`../design/eventos-do-funil.md`](../design/eventos-do-funil.md).
+Fonte do script: `public/rastreador/v1.js` (sem dependência). Desenho: [`../design/eventos-do-funil.md`](../design/eventos-do-funil.md).
