@@ -1,1 +1,0 @@
-select * from crm_lead_activities where type = 'external_event' order by created_at desc;
