@@ -49,13 +49,14 @@ test.describe("PDV: instalar o módulo pela tela de módulos", () => {
       await page.screenshot({ path: path.join(EVIDENCIA, "us-002-antes-de-instalar.png"), fullPage: true });
       await instalar.click();
     }
-    await expect(cartao.getByText(/instalado/i), "o módulo não ficou instalado").toBeVisible({ timeout: 30_000 });
+    // O selo, em texto exato: /instalado/i casaria também a descrição do cartão ("…onde o módulo é instalado").
+    await expect(cartao.getByText("Instalado", { exact: true }), "o módulo não ficou instalado").toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("modulos-erro")).toHaveCount(0);
     await page.screenshot({ path: path.join(EVIDENCIA, "us-002-instalado.png"), fullPage: true });
 
     // Recarregar mantém o estado, e o botão de instalar some: nada a duplicar.
     await page.reload();
-    await expect(page.getByTestId("modulo-pdv").getByText(/instalado/i)).toBeVisible();
+    await expect(page.getByTestId("modulo-pdv").getByText("Instalado", { exact: true })).toBeVisible();
     await expect(page.getByTestId("instalar-pdv")).toHaveCount(0);
   });
 });
