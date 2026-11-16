@@ -43,7 +43,7 @@ enabled = true
 port = 54323
 api_url = "http://127.0.0.1:54321"
 
-[inbucket]
+[local_smtp]
 enabled = true
 port = 54324
 
@@ -53,10 +53,11 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
+site_url = "http://localhost:3001"
 additional_redirect_urls = [
   "http://localhost:3000/auth/callback",
   "http://localhost:3000/auth/confirm",
+  "http://localhost:3001/auth/callback",
   "http://localhost:3001/auth/confirm",
 ]
 jwt_expiry = 3600
