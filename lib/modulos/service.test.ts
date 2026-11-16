@@ -62,6 +62,38 @@ describe("listarModulos", () => {
   });
 });
 
+describe("catálogo do módulo pdv", () => {
+  it("lista o pdv para a tela de instalação", async () => {
+    mocks.admin = fakeAdmin([]);
+    const resultado = await listarModulos();
+    expect(resultado.disponiveis.map((m) => m.slug)).toContain("pdv");
+  });
+
+  it("instalar o pdv duas vezes não duplica nem audita de novo (mesma operação)", async () => {
+    const linha = (applied: boolean) => ({
+      data: {
+        id: OPERATION,
+        kind: "module_install",
+        status: "completed",
+        actor_id: ACTOR,
+        name: "pdv",
+        result: { modulo: "pdv" },
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        applied_now: applied,
+      },
+      error: null,
+    });
+    let n = 0;
+    mocks.admin = fakeAdmin([], { fn_modulo_instalar: () => linha(n++ === 0) });
+    expect(await instalarModulo(ACTOR, OPERATION, "pdv")).toEqual({ operationId: OPERATION, appliedNow: true });
+    expect(await instalarModulo(ACTOR, OPERATION, "pdv")).toEqual({ operationId: OPERATION, appliedNow: false });
+    expect(mocks.audit).toHaveBeenCalledTimes(1);
+    const rpcs = (mocks.admin as ReturnType<typeof fakeAdmin>).rpcCalls;
+    expect(rpcs.map((c) => c.args.p_modulo)).toEqual(["pdv", "pdv"]);
+  });
+});
+
 describe("instalarModulo", () => {
   it("recusa um módulo fora do catálogo antes de chamar o banco", async () => {
     mocks.admin = fakeAdmin([]);

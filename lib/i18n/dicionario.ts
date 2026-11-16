@@ -16716,6 +16716,9 @@ export const DICIONARIO: Traducoes = {
   "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade. O caixa continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão continua com Comandas ligada.": {
     es: "La orden de servicio de la atención: ítems, forma de pago, comisiones y fidelidad. La caja sigue en el sistema aun sin este módulo. Toda instalación anterior a esta versión sigue con Órdenes de servicio activado.",
   },
+  "PDV (balcão e telefone)": { es: "PDV (mostrador y teléfono)" },
+  "Registra pedidos no balcão e por telefone, com o cliente e o estoque lidos do ERP da empresa.": { es: "Registra pedidos en el mostrador y por teléfono, con el cliente y el stock leídos del ERP de la empresa." },
+  "Ponto de venda para o balcão e o telefone: lojas, clientes e produtos lidos do ERP da empresa. Desligado por padrão; as tabelas nascem só onde o módulo é instalado.": { es: "Punto de venta para el mostrador y el teléfono: tiendas, clientes y productos leídos del ERP de la empresa. Desactivado por defecto; las tablas nacen solo donde se instala el módulo." },
   "Decide o que acontece quando uma empresa passa do teto de gasto de IA.": { es: "Decide qué pasa cuando una empresa supera el tope de gasto de IA." },
   "Recusa a entrega de mensagem do WhatsApp que não vier assinada.": { es: "Rechaza la entrega de mensajes de WhatsApp que no lleguen firmados." },
   "Acrescenta o texto de divulgação à primeira mensagem, ou bloqueia o envio sem ele.": { es: "Agrega el texto de divulgación al primer mensaje, o bloquea el envío sin él." },

@@ -12,7 +12,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { abrirAcesso } from "@/lib/external-db/acesso";
 
-import { CHAVE_DO_MODULO, esquecerMemoDosModulos, MEMO_DO_MODULO_MS, moduloLigadoComMemo, modulosLigados } from "./modulos";
+import {
+  CHAVE_DO_MODULO,
+  esquecerMemoDosModulos,
+  MEMO_DO_MODULO_MS,
+  moduloLigadoComMemo,
+  MODULOS_OPCIONAIS,
+  MODULOS_OPCIONAIS_POR_FLAG,
+  modulosLigados,
+} from "./modulos";
 
 type Resposta = { data?: unknown; error?: unknown } | Error;
 
@@ -110,6 +118,28 @@ describe("modulosLigados — honorarios (módulo de tabela, ADR-0002)", () => {
       }).db,
     );
     expect(resultado.sort()).toEqual(["banco_externo", "honorarios"]);
+  });
+});
+
+describe("modulosLigados — pdv (módulo de tabela, ADR-0002)", () => {
+  it("desligado por padrão: sem linha em modulos_instalados, pdv não aparece", async () => {
+    expect(await modulosLigados(banco().db)).not.toContain("pdv");
+  });
+
+  it("só 'ativo' liga; erro de banco ou exceção = desligado (fail-closed)", async () => {
+    const ativo = [{ modulo: "pdv", estado: "ativo" }];
+    expect(await modulosLigados(banco({ modulos_instalados: { data: ativo } }).db)).toEqual(["pdv"]);
+    expect(await modulosLigados(banco({ modulos_instalados: { data: [] } }).db)).toEqual([]);
+    expect(
+      await modulosLigados(banco({ modulos_instalados: { error: { code: "42P01" } } }).db),
+    ).toEqual([]);
+    expect(await modulosLigados(banco({ modulos_instalados: new Error("rede") }).db)).toEqual([]);
+  });
+
+  it("não se liga por flag: pdv fora de MODULOS_OPCIONAIS_POR_FLAG e sem chave em platform_config", () => {
+    expect(MODULOS_OPCIONAIS).toContain("pdv");
+    expect(MODULOS_OPCIONAIS_POR_FLAG as readonly string[]).not.toContain("pdv");
+    expect(Object.keys(CHAVE_DO_MODULO)).not.toContain("pdv");
   });
 });
 

@@ -35,6 +35,13 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
       "continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão " +
       "continua com Comandas ligada.",
   },
+  {
+    slug: "pdv",
+    nome: "PDV (balcão e telefone)",
+    descricao:
+      "Ponto de venda para o balcão e o telefone: lojas, clientes e produtos lidos do ERP da " +
+      "empresa. Desligado por padrão; as tabelas nascem só onde o módulo é instalado.",
+  },
 ];
 
 export function moduloDoCatalogo(slug: string): ModuloCatalogo | undefined {
