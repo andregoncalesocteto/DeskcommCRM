@@ -1,0 +1,17 @@
+flowchart LR
+  atendente["Atendente"]
+  base["Base de clientes (ERP via MCP ou CRM — a definir)"]
+  subgraph PDV["PDV — Identificar cliente"]
+    uc01(["UC01 Identificar cliente"])
+    uc02(["UC02 Cadastrar cliente novo"])
+    uc03(["UC03 Gerenciar endereços do cliente"])
+  end
+  atendente --> uc01
+  atendente --> uc02
+  atendente --> uc03
+  uc01 --- base
+  uc02 --- base
+  uc03 --- base
+  uc02 -. "«extend»" .-> uc01
+  uc03 -. "«extend»" .-> uc01
+  uc02 -. "«include»" .-> uc03

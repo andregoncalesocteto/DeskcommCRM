@@ -1,0 +1,13 @@
+# Ralph Progress Log
+Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd.json) · Branch: ralph/modulo-pdv-fases-1-e-2 · Início: 2026-11-16
+
+## Codebase Patterns
+- Commits: conventional commits em português, no formato `feat(modulo-pdv): US-NNN - título`, terminando com as linhas de atribuição do harness.
+- Banco local: `docker exec supabase_db_deskcomm-crm psql -U postgres` (não há psql no host). `pnpm test:db` sobe um Postgres efêmero próprio.
+- `pnpm typecheck` precisa de `NODE_OPTIONS=--max-old-space-size=8192`.
+- `pnpm test:unit` alcança o repositório inteiro; conferir o rodapé contra `grep FAIL`. Falhas pré-existentes no repositório: `e2e-apt-troca-espelho` (12), `e2e-preparo-tenta-de-novo` (2), `rate-limit` (5), `janela-24h-recusa-quem-envia-por-token` (1), `permissao-lida-no-primeiro-render` (1), `roteador-grava-o-roteiro` (2), todas independentes desta feature.
+- A stack local roda em docker: `pnpm local:up` reconstrói app e worker. O MCP responde em SSE e exige `Accept: application/json, text/event-stream`.
+- Padrões herdados da run `eventos-do-funil` (cujo `prd.json` e `progress.txt` seguem em `docs/ralph/`, no estado do git); as falhas pré-existentes citadas foram medidas naquela run e devem ser reconferidas.
+- Os documentos de origem desta run estão em `.business/bellacapri/projeto-crm/` (PRD em `modulo-pdv/prd-modulo-pdv-fases-1-e-2.md`, Design Doc, ADRs, contrato do ERP e formatos). O Ralph NÃO fala com o ERP real: as histórias entregam código e testes sobre fixtures.
+
+---

@@ -1,0 +1,339 @@
+{
+  "project": "DeskcommCRM",
+  "branchName": "ralph/modulo-pdv-fases-1-e-2",
+  "description": "Módulo PDV, fase 1 (esqueleto do módulo, lojas do tenant, camada do ERP, aba Lojas) e fase 2 parcial (identificar cliente e ficha em leitura). O módulo é opcional, desligado por padrão e vive só no fork da rede; o ERP é a fonte de cliente e de loja.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Provisionadora do módulo e tabela de lojas",
+      "description": "Como mantenedor, preciso da função que cria as tabelas do módulo quando ele é instalado, começando pela tabela de lojas do tenant, para que o módulo desligado não deixe tabela alguma. (PRD US-001)",
+      "acceptanceCriteria": [
+        "Migration versionada `<timestamp>_<NNNN>_<slug>.sql` com `-- manifest:` no cabeçalho, mais o mesmo conteúdo como apêndice idempotente no `supabase/baseline.sql`; `NNNN` conferido com `pnpm checar:colisao-de-migration`",
+        "Função `public.fn_pdv_provisionar()` `security definer`, sem parâmetros, com `revoke execute ... from public, anon` e `grant execute ... to service_role` apenas",
+        "A função cria `pdv_stores` com: `id`, `organization_id` (FK `organizations`, `on delete cascade`), `erp_store_code`, `sigla`, `nome`, `ativa` (padrão verdadeiro), `channel_session_id` (nullable, referência à tabela de conexões de canal; conferir o nome no baseline), `created_at`, `updated_at`",
+        "Únicos `(organization_id, sigla)` e `(organization_id, erp_store_code)`; todo `create` usa `if not exists`",
+        "RLS ligada com a política `tenant_isolation_pdv_stores_all` via `fn_user_org_ids()`",
+        "Teste prova que `pdv_stores` não existe antes de instalar o módulo e existe depois",
+        "Teste de invariante: duas organizações, uma não lê nem escreve as lojas da outra",
+        "`tests/invariants/hardening-definer-varredura.test.ts` continua verde",
+        "`pnpm test:db` passa (instalação nova e atualização com dados)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Registrar o módulo pdv",
+      "description": "Como dono da instalação, quero instalar e ligar o módulo PDV pela tela de módulos, para ativá-lo só nos tenants que o usam. (PRD US-002)",
+      "acceptanceCriteria": [
+        "Slug `pdv` acrescentado a `MODULOS_OPCIONAIS` e `MODULOS_DE_TABELA` (`lib/instalacao/modulos.ts`), com texto em `TEXTO_DO_MODULO` (`lib/recursos-opcionais/catalogo.ts`) e entrada em `CATALOGO_DE_MODULOS` (`lib/modulos/catalogo.ts`); conferir os nomes no repositório",
+        "Módulo desligado por padrão; a leitura é fail-closed (só o valor `ligado` liga)",
+        "A tela `/admin/modulos` lista o PDV; instalar chama `fn_pdv_provisionar` e grava o módulo como ativo; instalar duas vezes não falha nem duplica",
+        "`tests/unit/recursos-opcionais-catalogo.test.ts` e os testes de módulos continuam verdes, com caso novo para o `pdv`",
+        "Spec Playwright dos estados em `tests/e2e/pdv-instalar-modulo.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Camada do ERP: tipos, fixtures e leitura da resposta",
+      "description": "Como desenvolvedor, quero tipos e um leitor de resposta do ERP, para o resto do módulo não conhecer o protocolo. (PRD US-003, primeira metade)",
+      "acceptanceCriteria": [
+        "`lib/pdv/erp/tipos.ts` com os tipos Loja, ClienteResumo, Cliente, Endereco e ResultadoBusca, exatamente como em `.business/bellacapri/projeto-crm/contrato-mcp-erp-formatos.md`; `cpf` e `data_nascimento` opcionais",
+        "`lib/pdv/erp/resposta.ts` com uma função que lê o resultado de uma ferramenta: sucesso vem de `structuredContent`; com `isError` verdadeiro, o texto é lido como JSON `{ codigo, mensagem, detalhes? }` e vira `ErpPdvError` com `codigo` em `termo_invalido`, `nao_encontrado`, `nao_autorizado`, `erp_indisponivel`, `tempo_esgotado`; texto de erro que não é JSON válido vira `resposta_invalida` com o texto",
+        "Fixtures em `tests/fixtures/pdv-erp/` derivadas do contrato de formatos: `listar_lojas`, busca por telefone, por nome com 3 resultados, truncada e vazia, `obter_cliente` completo, sem endereço e sem campos sensíveis, e cada erro",
+        "Um teste por fixture; o CPF e a data de nascimento ausentes sem `campos_sensiveis` são tipados como ausentes, não como `null`",
+        "Nenhum import de `app/`, nenhuma rede, nenhum efeito de escrita",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Camada do ERP: transporte e leituras",
+      "description": "Como desenvolvedor, quero funções que chamem o ERP cadastrado para a organização, para o PDV ler lojas e clientes. (PRD US-003, segunda metade)",
+      "acceptanceCriteria": [
+        "`lib/pdv/erp/cliente.ts` exporta `listarLojas`, `buscarCliente(modo, termo, limite?)` e `obterCliente(id, { camposSensiveis? })`, todas recebendo o `organizationId` do chamador autenticado",
+        "Lê o endereço e a chave cifrada da organização no banco usando as funções que o CRM já tem para o servidor MCP externo (`lerEndpointMcpExterno`, `abrirChaveMcpExterno`; conferir os nomes) e chama `chamarFerramentaRemota` sem passar pelo carregador do turno de conversa",
+        "Tempo limite definido por chamada, em constante exportada, com 15000 ms para as leituras",
+        "Sem servidor registrado para a organização, lança `ErpPdvError` com `codigo` `erp_nao_configurado` e não abre rede",
+        "O endereço e a chave nunca aparecem em log nem na auditoria; só o host",
+        "Testes com o `fetch` injetado (opção `fetch` de `OpcoesDeChamada`): cada função chama a ferramenta certa com os argumentos certos, `campos_sensiveis` vai `false` por padrão, e cada erro do ERP vira o `ErpPdvError` esperado",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "API de lojas: leituras",
+      "description": "Como atendente ou gerente, quero consultar as lojas do meu tenant e as lojas disponíveis no ERP, para escolher quais o tenant atende. (PRD US-004)",
+      "acceptanceCriteria": [
+        "`GET /api/v1/pdv/lojas` devolve as lojas do tenant (papel `agent` ou mais), no wrapper `{ data, meta? }`, com `organization_id` resolvido da sessão e nunca do corpo",
+        "`GET /api/v1/pdv/lojas/erp` devolve as lojas do ERP (papel `manager` ou mais), marcando as que o tenant já tem",
+        "Módulo desligado devolve 404; ERP não configurado devolve o erro estável `erp_nao_configurado`; ERP fora do ar devolve 502 `erp_indisponivel`",
+        "Zod no input, `X-Request-Id` na resposta, JSON em `snake_case`",
+        "Testes de rota: papéis, módulo desligado, ERP indisponível e isolamento entre dois tenants",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "API de lojas: escrita",
+      "description": "Como gerente, quero adicionar lojas do ERP ao meu tenant, ativá-las, desativá-las e vincular a conexão de WhatsApp, para a loja do pedido ser definida pelo canal. (PRD US-005)",
+      "acceptanceCriteria": [
+        "`POST /api/v1/pdv/lojas` aceita a lista de lojas do ERP a adicionar (código e sigla), com `Idempotency-Key`; grava `erp_store_code`, `sigla` e `nome` vindos do ERP, nunca do corpo",
+        "`PATCH /api/v1/pdv/lojas/{id}` altera `ativa` e `channel_session_id`; uma conexão de outro tenant devolve 422",
+        "Papel mínimo `manager`; `requireSupportWrite(` antes do efeito; auditoria `pdv.store.updated` em toda mutação bem-sucedida",
+        "Adicionar uma loja que já existe não duplica (único por sigla) e responde de forma idempotente",
+        "`tests/unit/suporte-cobertura-de-efeitos.test.ts` continua verde",
+        "Testes: papéis, idempotência, conexão de outro tenant recusada e auditoria gravada",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Aba Lojas: página, lista e estados",
+      "description": "Como gerente do tenant, quero ver na configuração as lojas que o tenant atende, para conferir a configuração do PDV. (PRD US-006, primeira metade)",
+      "acceptanceCriteria": [
+        "Nova página na configuração do tenant, com entrada no `NAV_CATALOG` (`modulo: \"pdv\"`, grupo `organizacao`, seção \"Sua empresa\", `minRole: \"manager\"`) e rótulo \"Lojas\"; conferir o grupo e a seção existentes",
+        "Lista as lojas do tenant: sigla, nome, código do ERP e situação (ativa ou inativa)",
+        "Estados: vazio (\"Este tenant ainda não tem lojas\"), carregando (esqueleto), erro com o botão \"Tentar de novo\", ERP não configurado (orientação ao dono da instalação) e módulo desligado (a porta some e a rota devolve 404)",
+        "Textos em português; botões e áreas clicáveis com no mínimo 44 px de altura",
+        "Spec Playwright dos estados em `tests/e2e/pdv-aba-lojas-lista.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-lista-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Aba Lojas: adicionar lojas do ERP",
+      "description": "Como gerente, quero adicionar lojas escolhendo-as da lista do ERP, para não digitar códigos. (PRD US-006, segunda metade)",
+      "acceptanceCriteria": [
+        "Botão \"Adicionar lojas do ERP\" abre um modal com as lojas do ERP; as já adicionadas aparecem desabilitadas; confirmar chama `POST /api/v1/pdv/lojas`",
+        "Após confirmar, o modal fecha, a lista atualiza sem recarregar e aparece o aviso \"Lojas adicionadas\"",
+        "Estados do modal: carregando, erro do ERP com \"Tentar de novo\", nenhuma loja nova disponível, e falha ao salvar com \"Não foi possível salvar. Tente de novo.\" mantendo a seleção",
+        "Spec Playwright dos estados em `tests/e2e/pdv-aba-lojas-adicionar.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-adicionar-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Aba Lojas: ativar, desativar e vincular conexão",
+      "description": "Como gerente, quero ativar ou desativar uma loja e vincular a ela a conexão de WhatsApp, para o canal de entrada definir a loja. (PRD US-007)",
+      "acceptanceCriteria": [
+        "Cada loja da lista tem um controle de ativa e um seletor de conexão com as conexões do tenant, mais a opção \"Sem conexão\"",
+        "Alterar salva ao confirmar, mostra o aviso \"Loja atualizada\" e atualiza a lista sem recarregar",
+        "Falha ao salvar mantém a alteração na tela com a mensagem \"Não foi possível salvar. Tente de novo.\"",
+        "Loja inativa aparece esmaecida e identificada como inativa",
+        "Spec Playwright dos estados em `tests/e2e/pdv-aba-lojas-editar.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-editar-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "API de busca de cliente",
+      "description": "Como atendente, quero buscar cliente por telefone, nome ou CPF, para identificá-lo antes do pedido. (PRD US-008)",
+      "acceptanceCriteria": [
+        "`GET /api/v1/pdv/clientes?modo=telefone|nome|cpf&q=` (papel `agent` ou mais) chama `buscarCliente`; Zod valida `modo` e `q`",
+        "Resposta no wrapper do CRM com `id`, `nome`, `endereco_principal`, `total_encontrado` e `truncado`; sem CPF, telefone nem e-mail na lista",
+        "`termo_invalido` do ERP vira 422 com a mensagem do ERP; `erp_indisponivel` e `tempo_esgotado` viram 502; `erp_nao_configurado` é estável; módulo desligado devolve 404",
+        "O termo de busca (que pode ser CPF ou telefone) não aparece em log, no Sentry nem na auditoria",
+        "Limite de taxa aplicado à rota",
+        "Testes: cada modo, vazio, truncado, erros do ERP e ausência de dado pessoal nos logs",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Tela de identificação do cliente: busca e lista de candidatos",
+      "description": "Como atendente, quero uma tela para buscar o cliente por telefone, nome ou CPF e ver os candidatos. (PRD US-009, primeira metade)",
+      "acceptanceCriteria": [
+        "Rota `/app/pdv/clientes` com layout que chama `notFound()` quando o módulo está desligado, e porta no `NAV_CATALOG` com `modulo: \"pdv\"`; conferir o grupo",
+        "Barra de busca com seletor Telefone, Nome e CPF (padrão Telefone), máscara conforme o modo (`(00) 00000-0000`, `000.000.000-00`), botão \"Buscar\" e Enter buscando",
+        "Lista de candidatos com nome e endereço principal em uma linha cortada com reticências; texto longo não quebra o layout; nesta história a lista é só de exibição, e abrir a ficha vem na US-016",
+        "CPF e telefone digitados não aparecem na URL nem em `localStorage`",
+        "Spec Playwright dos estados em `tests/e2e/pdv-identificar-cliente.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-identificar-cliente-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Tela de identificação do cliente: estados e erros",
+      "description": "Como atendente, quero mensagens claras quando a busca não encontra, falha ou está mal preenchida. (PRD US-009, segunda metade)",
+      "acceptanceCriteria": [
+        "Antes da primeira busca: \"Digite um telefone, nome ou CPF para buscar o cliente\"",
+        "Campo vazio: não busca e mostra \"Digite algo para buscar\"; telefone incompleto: \"Informe o telefone com DDD\"; CPF inválido, inclusive com dígito verificador errado: \"CPF inválido\"",
+        "Carregando: esqueleto na lista e botão \"Buscar\" desabilitado",
+        "Nenhum resultado: \"Nenhum cliente encontrado para \"…\".\" mantendo o termo no campo",
+        "Erro na busca: \"Não foi possível buscar o cliente agora.\" com o botão \"Tentar de novo\", que repete a última busca; com o ERP fora do ar o atendente vê o erro e espera, sem cadastro provisório (ADR-002)",
+        "ERP não configurado para o tenant: orientação clara, sem expor endereço nem chave",
+        "Spec Playwright dos estados em `tests/e2e/pdv-identificar-cliente-estados.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Tabela do vínculo do contato espelho",
+      "description": "Como mantenedor, preciso guardar a ligação entre o contato do CRM e o cliente do ERP, para o CRM manter conversas, funil e LGPD sem ser o cadastro mestre. (PRD US-010)",
+      "acceptanceCriteria": [
+        "Migration versionada `<timestamp>_<NNNN>_<slug>.sql` com `-- manifest:` no cabeçalho, mais o mesmo conteúdo como apêndice idempotente no `supabase/baseline.sql`; `NNNN` conferido com `pnpm checar:colisao-de-migration`",
+        "A migration redefine `fn_pdv_provisionar` com `create or replace` e acrescenta `pdv_customer_links` com `id`, `organization_id`, `contact_id` (FK `contacts`), `erp_customer_id` e `linked_at`",
+        "Únicos `(organization_id, erp_customer_id)` e `(organization_id, contact_id)`; RLS com a política `tenant_isolation_pdv_customer_links_all`",
+        "Reinstalar o módulo, ou atualizar um banco que já o tinha, cria a tabela nova sem perder dados (`pnpm test:db:update` passa)",
+        "Teste de isolamento entre duas organizações",
+        "`pnpm test:db` passa (instalação nova e atualização com dados)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Serviço do contato espelho",
+      "description": "Como sistema, quando o atendente seleciona um cliente do ERP, quero encontrar ou criar o contato correspondente no CRM, sem duplicar. (PRD US-011)",
+      "acceptanceCriteria": [
+        "`vincularClienteDoErp(organizationId, clienteDoErp)` procura o contato por telefone (variantes brasileiras que o CRM já usa), por hash do CPF e por e-mail; se acha um, grava o vínculo; se não acha, cria o contato e o vínculo",
+        "Vínculo já existente é devolvido sem alterar nada",
+        "O erro de unicidade (`23505`) no INSERT é tratado e leva ao contato já existente",
+        "Mais de um contato candidato: não vincula nenhum e lança o erro tipado `contato_ambiguo`",
+        "O CPF é gravado como o CRM já faz (cifrado, com hash) e nunca aparece em log; `organization_id` vem do chamador autenticado, nunca do cliente do ERP",
+        "Testes unitários e de banco: acha por telefone, por CPF e por e-mail; cria; idempotência; ambíguo; duas chamadas simultâneas para o mesmo cliente",
+        "`pnpm test:db` passa (instalação nova e atualização com dados)",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "API da ficha do cliente",
+      "description": "Como atendente, quero abrir a ficha do cliente escolhido, com dados pessoais e endereços. (PRD US-012)",
+      "acceptanceCriteria": [
+        "`GET /api/v1/pdv/clientes/{erp_id}` (papel `agent` ou mais) chama `obterCliente` com `camposSensiveis: true`, garante o vínculo do contato espelho e devolve a ficha",
+        "A resposta traz nome, telefone, e-mail, CPF, data de nascimento e a lista de endereços (um só principal; `loja_entrega` ou `null`)",
+        "`nao_encontrado` vira 404; erros do ERP como na API de busca; `contato_ambiguo` vira 409 com mensagem para o atendente",
+        "CPF e data de nascimento não vão para log nem auditoria",
+        "Testes: ficha completa, sem endereço, cliente inexistente, contato ambíguo e isolamento entre tenants",
+        "Tests pass (`pnpm test:unit`, sem filtro de caminho)",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Tela da ficha do cliente: dados pessoais",
+      "description": "Como atendente, quero ver os dados pessoais do cliente que escolhi, para conferir que é o cliente certo. (PRD US-013, primeira metade)",
+      "acceptanceCriteria": [
+        "Clicar em um candidato, ou o resultado único de telefone ou CPF, abre a ficha na coluna da direita da tela de identificação",
+        "Bloco \"Dados pessoais\": nome, telefone, e-mail, CPF mascarado e data de nascimento; campo ausente aparece como \"Não informado\"",
+        "A ficha é somente leitura: nenhum botão de editar, adicionar, remover ou selecionar",
+        "Estados: carregando (esqueleto), erro com \"Tentar de novo\", cliente não encontrado e contato ambíguo",
+        "Nome muito longo não quebra o layout",
+        "Spec Playwright dos estados em `tests/e2e/pdv-ficha-cliente-dados.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-ficha-cliente-dados-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Tela da ficha do cliente: endereços",
+      "description": "Como atendente, quero ver os endereços do cliente com a loja que entrega em cada um. (PRD US-013, segunda metade)",
+      "acceptanceCriteria": [
+        "Bloco \"Endereços (N)\" abaixo dos dados pessoais, com um card por endereço: selo \"Principal\", endereço e complemento, bairro, cidade e UF, CEP, e a linha \"Loja de entrega: <sigla>\" ou \"Nenhuma loja entrega neste endereço\"",
+        "Cliente sem endereço mostra \"Este cliente ainda não tem endereço\"",
+        "Endereço muito longo não quebra o layout",
+        "Somente leitura: nenhum botão de alterar, remover, tornar principal ou adicionar",
+        "Spec Playwright dos estados em `tests/e2e/pdv-ficha-cliente-enderecos.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-ficha-cliente-enderecos-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Registro da entrega",
+      "description": "Como mantenedor, quero registrar a entrega na documentação do CRM, para o produto continuar auditável. (PRD US-014)",
+      "acceptanceCriteria": [
+        "Fragmento em `.changes/` declarando o efeito no operador como `capacidade_nova` (módulo opcional, desligado por padrão), com texto adequado a nota pública; `pnpm release:conferir` passa",
+        "`docs/testing/user-journey-map.md` com os casos novos (instalar e ligar o módulo, cadastrar lojas, identificar cliente, ver ficha) e a prioridade de cada um",
+        "Documento em `docs/features/` descrevendo o módulo, o cadastro do ERP por tenant, a exigência de HTTPS público e o que ainda não existe (endereços, cadastro, pedido)",
+        "Variáveis de ambiente novas, se houver, em `.env.example` e `lib/env.ts`",
+        "O destino da mudança (núcleo, extensão, ambos ou infraestrutura) está declarado no documento, com a razão pela pergunta \"se nenhuma organização ativar isto, a operação comum continua inteira?\"",
+        "Lint passes",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

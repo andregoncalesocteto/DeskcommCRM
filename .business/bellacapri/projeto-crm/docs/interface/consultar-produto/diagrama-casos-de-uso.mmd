@@ -1,0 +1,11 @@
+flowchart LR
+  atendente["Atendente"]
+  erp["ERP (via MCP)"]
+  subgraph PDV["PDV — Consulta de produtos"]
+    uc01(["UC01 Buscar produto"])
+    uc02(["UC02 Adicionar produto ao carrinho"])
+  end
+  atendente --> uc01
+  atendente --> uc02
+  uc01 --- erp
+  uc02 -. "«extend»" .-> uc01
