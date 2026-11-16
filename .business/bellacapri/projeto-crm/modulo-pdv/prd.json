@@ -39,8 +39,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Spec e2e executada em 2026-11-16 contra stack Supabase isolada (project_id e2e-pdv); evidência em evidence/modulo-pdv/."
     },
     {
       "id": "US-003",
