@@ -281,9 +281,16 @@ describe("#1906 — regra de módulo não fica visível à conferência antiga d
     expect(provisionadoras(BASELINE).length).toBeGreaterThan(0);
     for (const nome of provisionadoras(BASELINE)) {
       const corpo = corpoAteODelimitador(BASELINE, nome);
-      expect(corpo, `corpo de ${nome} não encontrado`).toContain("create policy");
+      // Só prova que o corpo foi ACHADO. Nem toda provisionadora escreve `create policy`: as que
+      // deixam a RLS para `fn_proteger_modulo_provisionado()` (pdv) não têm nenhuma. O controle
+      // de que a régua enxerga policy de verdade é o caso de honorários, logo abaixo.
+      expect(corpo, `corpo de ${nome} não encontrado`).toContain("begin");
       const visiveis = corpo.split("\n").filter((l) => REGRA_DA_CONFERENCIA_ANTIGA.test(l));
       expect(visiveis, `${nome}: parta em duas linhas (create policy X / on public.Y)`).toEqual([]);
     }
+  });
+
+  it("controle positivo: o corpo de honorários tem `create policy`, então a régua não passa por vazio", () => {
+    expect(corpoAteODelimitador(BASELINE, "fn_honorarios_provisionar")).toContain("create policy");
   });
 });

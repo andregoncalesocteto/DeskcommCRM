@@ -93,6 +93,11 @@ const ALLOWLIST: Record<string, string> = {
     "regex achar a palavra `name`, não o dado — por isso a decisão é não " +
     "declarar seção: declarar faria a anonimização zerar TODAS as regras da " +
     "organização (a ligação seria organization_id, sem contato na tabela).",
+  "pdv.pdv_stores":
+    "pdv_stores é cadastro de LOJA da rede (sigla, código no ERP e `nome` da loja, " +
+    "ex.: Campinas), sem ligação com contato nem texto sobre pessoa: o que derruba a " +
+    "régua é o regex achar a palavra `nome`, não o dado. Declarar seção faria a " +
+    "anonimização de um contato mexer em loja da organização inteira.",
   "financeiro.loyalty_ledger":
     "Decisão escrita do #1504 (razão `manter` de " +
     "lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts): o extrato de pontos " +
