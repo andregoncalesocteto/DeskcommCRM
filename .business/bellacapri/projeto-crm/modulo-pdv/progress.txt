@@ -39,3 +39,12 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Spec e2e nova precisa estar numa `SPECS_PARTE_*` (cobrança em `tests/unit/e2e-cobertura-completa.test.ts`).
   - Tela de instalar usa testids `modulo-<slug>` e `instalar-<slug>`; o botão some após instalar.
 ---
+
+## 2026-11-16 - US-003
+- Implementado: `lib/pdv/erp/tipos.ts` (esquemas Zod + tipos Loja, ClienteResumo, Cliente, Endereco, ResultadoBusca; `cpf`/`data_nascimento` `.nullable().optional()`), `lib/pdv/erp/resposta.ts` (`ErpPdvError` com `codigo`/`detalhes`, `lerResultado(resultado, esquema)`: sucesso de `structuredContent` validado por Zod; `isError` lê o texto como JSON; texto não-JSON, JSON sem código conhecido ou formato inesperado viram `resposta_invalida`; a união de códigos já inclui `erp_nao_configurado` para a US-004), 15 fixtures em `tests/fixtures/pdv-erp/*.json` (forma de CallToolResult) e `lib/pdv/erp/resposta.test.ts` (19 casos, um por fixture mais bordas). Sem import de app/, sem rede, sem escrita. Também `evidence/modulo-pdv/US-002.md`, que cita os PNGs da US-002 (ver Learnings).
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings preexistentes); `pnpm test:unit` na 1a rodada `Test Files 7 failed`, `Tests 24 failed | 31006 passed`: as 23 da linha de base + `tests/unit/evidencia-citada.test.ts` (regressão da US-002, corrigida; o teste isolado passa depois do `git add`). Não reexecutei a suíte inteira depois da correção. Sem schema: test:db não rodado.
+- **Learnings:**
+  - PNG versionado em `evidence/` precisa ser citado por um documento versionado (`tests/unit/evidencia-citada.test.ts`, projeto `cercas`); a US-002 deixou os dela órfãos e ninguém rodou a suíte inteira depois. Toda US com screenshot cria `evidence/modulo-pdv/US-NNN.md` com `![..](evidence/modulo-pdv/x.png)`. O teste lê `git ls-files`: só passa depois do `git add`.
+  - A leitura da resposta é genérica (`lerResultado(resultado, esquema)`); a US-004 passa o esquema de cada ferramenta (`ListaDeLojasSchema`, `ResultadoBuscaSchema`, `ObterClienteSchema`).
+  - Fixtures são o resultado MCP inteiro (`content` + `structuredContent`/`isError`), para o `fetch` injetado da US-004 poder devolvê-las por JSON-RPC.
+---
