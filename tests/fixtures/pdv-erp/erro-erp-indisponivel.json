@@ -1,0 +1,9 @@
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"codigo\": \"erp_indisponivel\", \"mensagem\": \"ERP fora do ar.\"}"
+    }
+  ]
+}

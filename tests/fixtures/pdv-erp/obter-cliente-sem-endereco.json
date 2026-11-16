@@ -1,0 +1,17 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "structuredContent": {
+    "cliente": {
+      "id": "c-0004",
+      "nome": "João Pereira Lima",
+      "telefone": "+5519993331100",
+      "email": "joao.lima@email.com",
+      "enderecos": []
+    }
+  }
+}

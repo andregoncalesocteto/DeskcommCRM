@@ -1,0 +1,24 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "structuredContent": {
+    "clientes": [
+      {
+        "id": "c-0001",
+        "nome": "Maria Oliveira",
+        "endereco_principal": "Rua das Acácias, 120 — Apto 32, bloco B — Jardim Primavera, Campinas/SP"
+      },
+      {
+        "id": "c-0003",
+        "nome": "Mariana Lopes",
+        "endereco_principal": null
+      }
+    ],
+    "total_encontrado": 3,
+    "truncado": true
+  }
+}

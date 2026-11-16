@@ -1,0 +1,47 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "5 lojas"
+    }
+  ],
+  "structuredContent": {
+    "lojas": [
+      {
+        "codigo": "1",
+        "sigla": "CAS",
+        "nome": "Campinas",
+        "endereco": "Rua Exemplo, 100 - Campinas",
+        "ativa": true
+      },
+      {
+        "codigo": "2",
+        "sigla": "RPA",
+        "nome": "Rio Preto Centro",
+        "endereco": "Rua Exemplo, 200 - Rio Preto Centro",
+        "ativa": true
+      },
+      {
+        "codigo": "3",
+        "sigla": "RPV",
+        "nome": "Rio Preto Vila",
+        "endereco": "Rua Exemplo, 300 - Rio Preto Vila",
+        "ativa": true
+      },
+      {
+        "codigo": "4",
+        "sigla": "RPR",
+        "nome": "Rio Preto Redentora",
+        "endereco": "Rua Exemplo, 400 - Rio Preto Redentora",
+        "ativa": true
+      },
+      {
+        "codigo": "5",
+        "sigla": "RPI",
+        "nome": "Rio Preto Industrial",
+        "endereco": "Rua Exemplo, 500 - Rio Preto Industrial",
+        "ativa": true
+      }
+    ]
+  }
+}

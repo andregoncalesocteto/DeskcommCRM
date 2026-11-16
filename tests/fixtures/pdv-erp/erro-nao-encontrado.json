@@ -1,0 +1,9 @@
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"codigo\": \"nao_encontrado\", \"mensagem\": \"Cliente não encontrado.\"}"
+    }
+  ]
+}

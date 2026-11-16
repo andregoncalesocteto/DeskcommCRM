@@ -1,0 +1,13 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "structuredContent": {
+    "clientes": [],
+    "total_encontrado": 0,
+    "truncado": false
+  }
+}

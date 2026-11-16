@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "structuredContent": {
+    "clientes": [
+      {
+        "id": "c-0002",
+        "nome": "Maria de Fátima Albuquerque Nascimento Souza dos Santos",
+        "endereco_principal": "Rua Coronel Quirino, 880 — Cambuí, Campinas/SP"
+      },
+      {
+        "id": "c-0001",
+        "nome": "Maria Oliveira",
+        "endereco_principal": "Rua das Acácias, 120 — Apto 32, bloco B — Jardim Primavera, Campinas/SP"
+      },
+      {
+        "id": "c-0003",
+        "nome": "Mariana Lopes",
+        "endereco_principal": "Rua Dr. Sampaio Ferraz, 45 — Bosque, Campinas/SP"
+      }
+    ],
+    "total_encontrado": 3,
+    "truncado": false
+  }
+}

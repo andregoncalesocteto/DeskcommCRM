@@ -1,0 +1,9 @@
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"codigo\": \"tempo_esgotado\", \"mensagem\": \"O ERP demorou demais.\"}"
+    }
+  ]
+}

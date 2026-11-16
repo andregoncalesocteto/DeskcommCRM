@@ -1,0 +1,9 @@
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"codigo\": \"termo_invalido\", \"mensagem\": \"Informe o telefone com DDD.\", \"detalhes\": {\"campo\": \"termo\"}}"
+    }
+  ]
+}
