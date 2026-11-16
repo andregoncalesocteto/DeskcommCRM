@@ -26,3 +26,13 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Cada tabela nova do módulo exige as três registrações descritas em Codebase Patterns (grants, LGPD, PROVA_DE_MODULO). `pdv_orders` e filhas terão dado pessoal (endereço de entrega): lá a seção de LGPD provavelmente tem de ser declarada em `modulo_secoes_lgpd`, não só allowlist.
   - Em test:db, a provisionadora é chamada por arquivo de teste num banco clonado do molde sem o módulo; `tableExists("pdv_stores")` é falso até alguém chamar a função.
 ---
+
+## 2026-11-16 - US-002 (passes MANTIDO false: spec Playwright escrita mas NÃO executada, sem screenshot)
+- Implementado: slug `pdv` em `MODULOS_OPCIONAIS` e `MODULOS_DE_TABELA` (`lib/instalacao/modulos.ts`; fora de `MODULOS_OPCIONAIS_POR_FLAG`, então sem chave em platform_config e desligado por padrão, fail-closed via `modulos_instalados.estado='ativo'`), `TEXTO_DO_MODULO.pdv`, `CATALOGO_DE_MODULOS` (slug pdv, nome "PDV (balcão e telefone)"), 3 chaves es no `lib/i18n/dicionario.ts`. Testes: casos novos em `lib/instalacao/modulos.test.ts` e `lib/modulos/service.test.ts`; invariante novo `tests/invariants/pdv-instalar-modulo.test.ts` (fn_modulo_instalar('pdv') real: desligado por padrão, instala+ativo, reinstalar não falha nem duplica). Spec `tests/e2e/pdv-instalar-modulo.spec.ts` (intercepta `**/api/v1/pdv/**`) registrada em `SPECS_PARTE_5` do e2e.yml; screenshots iriam para `evidence/modulo-pdv/`.
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings preexistentes); `pnpm test:unit` exit 1, `Test Files 6 failed | 2841 passed`, `Tests 23 failed | 30988 passed` (mesmas 23 falhas/6 arquivos da linha de base; +6 testes novos); `CONFERENCIA_KIT_RELEASE=v1.63.0 pnpm test:db` exit 0 (540 arquivos, 4280 passed). Sem schema novo: test:db:update não rodado.
+- NÃO cumprido: a spec Playwright não foi executada (exige build de produção + Supabase fresco + creds de e2e, e a stack do usuário não foi tocada), logo não há screenshot em `evidence/modulo-pdv/` nem prova pela tela de que `/admin/modulos` lista o PDV. Próxima iteração/humano: rodar `pnpm playwright test tests/e2e/pdv-instalar-modulo.spec.ts` em ambiente fresco, commitar os PNGs e só então marcar passes:true.
+- **Learnings:**
+  - Módulo de tabela novo = 4 pontos de registro (modulos.ts x2, recursos-opcionais/catalogo.ts, modulos/catalogo.ts) + dicionário es para textos novos; a porta no `NAV_CATALOG` fica para história própria (módulo de tabela não entra no invariante MODULOS_NA_TELA).
+  - Spec e2e nova precisa estar numa `SPECS_PARTE_*` (cobrança em `tests/unit/e2e-cobertura-completa.test.ts`).
+  - Tela de instalar usa testids `modulo-<slug>` e `instalar-<slug>`; o botão some após instalar.
+---
