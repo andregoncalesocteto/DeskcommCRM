@@ -126,7 +126,7 @@
         "Estados: vazio (\"Este tenant ainda não tem lojas\"), carregando (esqueleto), erro com o botão \"Tentar de novo\", ERP não configurado (orientação ao dono da instalação) e módulo desligado (a porta some e a rota devolve 404)",
         "Textos em português; botões e áreas clicáveis com no mínimo 44 px de altura",
         "Spec Playwright dos estados em `tests/e2e/pdv-aba-lojas-lista.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
-        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-lista-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-lista-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel'; a spec só precisa estar escrita e registrada: a execução contra a homologação e o screenshot ficam para um humano, depois que a homologação existir, e o `progress.txt` registra que ela não foi executada",
         "Lint passes",
         "Typecheck passes"
       ],
@@ -143,7 +143,7 @@
         "Após confirmar, o modal fecha, a lista atualiza sem recarregar e aparece o aviso \"Lojas adicionadas\"",
         "Estados do modal: carregando, erro do ERP com \"Tentar de novo\", nenhuma loja nova disponível, e falha ao salvar com \"Não foi possível salvar. Tente de novo.\" mantendo a seleção",
         "Spec Playwright dos estados em `tests/e2e/pdv-aba-lojas-adicionar.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
-        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-adicionar-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-adicionar-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel'; a spec só precisa estar escrita e registrada: a execução contra a homologação e o screenshot ficam para um humano, depois que a homologação existir, e o `progress.txt` registra que ela não foi executada",
         "Lint passes",
         "Typecheck passes"
       ],
@@ -161,7 +161,7 @@
         "Falha ao salvar mantém a alteração na tela com a mensagem \"Não foi possível salvar. Tente de novo.\"",
         "Loja inativa aparece esmaecida e identificada como inativa",
         "Spec Playwright dos estados em `tests/e2e/pdv-aba-lojas-editar.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
-        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-editar-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-aba-lojas-editar-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel'; a spec só precisa estar escrita e registrada: a execução contra a homologação e o screenshot ficam para um humano, depois que a homologação existir, e o `progress.txt` registra que ela não foi executada",
         "Lint passes",
         "Typecheck passes"
       ],
@@ -198,7 +198,7 @@
         "Lista de candidatos com nome e endereço principal em uma linha cortada com reticências; texto longo não quebra o layout; nesta história a lista é só de exibição, e abrir a ficha vem na US-016",
         "CPF e telefone digitados não aparecem na URL nem em `localStorage`",
         "Spec Playwright dos estados em `tests/e2e/pdv-identificar-cliente.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
-        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-identificar-cliente-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-identificar-cliente-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel'; a spec só precisa estar escrita e registrada: a execução contra a homologação e o screenshot ficam para um humano, depois que a homologação existir, e o `progress.txt` registra que ela não foi executada",
         "Lint passes",
         "Typecheck passes"
       ],
@@ -292,7 +292,7 @@
         "Estados: carregando (esqueleto), erro com \"Tentar de novo\", cliente não encontrado e contato ambíguo",
         "Nome muito longo não quebra o layout",
         "Spec Playwright dos estados em `tests/e2e/pdv-ficha-cliente-dados.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
-        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-ficha-cliente-dados-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-ficha-cliente-dados-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel'; a spec só precisa estar escrita e registrada: a execução contra a homologação e o screenshot ficam para um humano, depois que a homologação existir, e o `progress.txt` registra que ela não foi executada",
         "Lint passes",
         "Typecheck passes"
       ],
@@ -310,7 +310,7 @@
         "Endereço muito longo não quebra o layout",
         "Somente leitura: nenhum botão de alterar, remover, tornar principal ou adicionar",
         "Spec Playwright dos estados em `tests/e2e/pdv-ficha-cliente-enderecos.spec.ts`, com as rotas `/api/v1/pdv/*` do próprio CRM interceptadas, registrada numa `SPECS_PARTE_*` do `e2e.yml`, com screenshot em `evidence/modulo-pdv/`",
-        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-ficha-cliente-enderecos-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel', com screenshot em `evidence/modulo-pdv/`",
+        "Spec Playwright do caminho feliz contra a homologação do ERP em `tests/e2e/pdv-ficha-cliente-enderecos-homologacao.spec.ts`, registrada em `FORA_DO_CI` do `e2e.yml` com o motivo 'depende da homologação do ERP por túnel'; a spec só precisa estar escrita e registrada: a execução contra a homologação e o screenshot ficam para um humano, depois que a homologação existir, e o `progress.txt` registra que ela não foi executada",
         "Lint passes",
         "Typecheck passes"
       ],
