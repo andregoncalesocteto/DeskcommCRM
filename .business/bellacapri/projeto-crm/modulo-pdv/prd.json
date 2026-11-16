@@ -21,8 +21,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verificado: test:db (539 arquivos, exit 0) e test:db:update (exit 0), ambos com CONFERENCIA_KIT_RELEASE=v1.63.0 porque o clone não tem release própria e a conferência do update.sh falha sem rede/release; hardening-definer-varredura verde dentro do test:db. NÃO medido: colisão de NNNN contra PRs abertos (o gh não está instalado; só main + refs locais). A US-001 também registrou pdv_stores em três invariantes que enumeram tabelas de módulo (grants-explicitos, lgpd-modulo-nao-declarado, adr-0002-d8) e relaxou uma asserção de adr-0002-funcao-provisionadora.test.ts que exigia `create policy` em toda provisionadora."
     },
     {
       "id": "US-002",
