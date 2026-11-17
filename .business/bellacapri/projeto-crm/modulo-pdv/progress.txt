@@ -101,3 +101,15 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - `ja_cadastrada` já vem na rota `/pdv/lojas/erp` (US-005): o modal não precisa cruzar com a lista do tenant.
   - Toast do `sonner` aparece como texto exato "Lojas adicionadas": `getByText(..., { exact: true })` basta.
 ---
+
+## 2026-11-16 - US-009
+- Implementado: `app/app/settings/tenant/lojas/_linha.tsx` (`LinhaDeLoja`): interruptor de ativa (Switch) e seletor de conexão (Select com "Sem conexão" + conexões do tenant lidas de `GET /api/v1/channel-sessions`, rótulo por `nomeDoCanal`). Mudar cria rascunho na tela; "Salvar"/"Cancelar" aparecem só com mudança; Salvar = `PATCH /pdv/lojas/[id]` com `{ativa, channel_session_id}`, sucesso invalida `["pdv","lojas"]` e toast "Loja atualizada"; falha mantém o rascunho com "Não foi possível salvar. Tente de novo." na linha. Loja inativa: dados esmaecidos (opacity-60) + selo "Inativa". `_client.tsx` passou a renderizar `LinhaDeLoja` e a buscar as conexões. 5 textos novos no dicionário es. Specs: `pdv-aba-lojas-editar.spec.ts` (em `SPECS_PARTE_5`) e `pdv-aba-lojas-editar-homologacao.spec.ts` (em `FORA_DO_CI`, motivo 'depende da homologação do ERP por túnel'; pula sem `PDV_HOMOLOGACAO=1`). Evidência: `evidence/modulo-pdv/US-009.md` + 5 PNGs.
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings, igual à base); e2e dos estados `1 passed (8.0s)` rodado DEPOIS da última edição de código/spec (stack isolada, build de produção; seletor e Salvar >= 44 px por getBoundingClientRect); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2845 passed`, `Tests 23 failed | 31072 passed`, mesmas 23 falhas/6 arquivos da linha de base, sem linha Errors. Sem schema: test:db não rodado. Stack/worktree isolados removidos.
+- NÃO executado: `pdv-aba-lojas-editar-homologacao.spec.ts` (depende da homologação do ERP por túnel; fica para um humano, com o screenshot `us-009-homologacao.png`; seus seletores nunca rodaram). Não verificado: PATCH real contra o banco (a spec intercepta; a rota é coberta por `escrita.test.ts`); lista de conexões real (simulada na spec); Switch tem 20 px de alto no desktop (a área de 44 px é só `pointer-coarse`, padrão do componente).
+- **Learnings:**
+  - `Select` trigger tem `lg:min-h-0`: a 1280 px ficava com 36 px (a 1a execução da spec reprovou na medição). Passe `className="h-11 lg:h-11 lg:min-h-11"`.
+  - Rótulo de conexão: use `nomeDoCanal` (`lib/channels/estado`); `display_name || phone_number || waha_session_name` em tela reprova `estado-do-canal-na-tela.test.ts` (só apareceu no `test:unit` completo).
+  - Radix Select não aceita `value=""`: use sentinela (`__sem_conexao__`) para "Sem conexão" e converta para `null` no corpo.
+  - Se `pnpm e2e:build` falhar com "bundle contém o host de produção", apague `.env.local` do worktree e refaça (o `cp .env.e2e .env.local` só vem DEPOIS do build). A mensagem de segurança do Next pode abortar várias vezes seguidas; repetir o mesmo comando.
+  - Rascunho por linha sem useEffect: estado `undefined` = "sem override" e valor efetivo = `override ?? loja`; `mudou` é derivado e zera sozinho quando a lista é refeita.
+---
