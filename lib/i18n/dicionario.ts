@@ -16305,6 +16305,12 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível carregar a ficha do cliente.": { es: "No fue posible cargar la ficha del cliente." },
   "Não informado": { es: "No informado" },
   "Dados pessoais": { es: "Datos personales" },
+  "Endereços": { es: "Direcciones" },
+  "Este cliente ainda não tem endereço": { es: "Este cliente todavía no tiene dirección" },
+  "Principal": { es: "Principal" },
+  "CEP": { es: "CEP" },
+  "Loja de entrega": { es: "Tienda de entrega" },
+  "Nenhuma loja entrega neste endereço": { es: "Ninguna tienda entrega en esta dirección" },
   "O modelo de cobrança de cada caso e o calendário de parcelas.": {
     es: "El modelo de cobro de cada caso y el calendario de cuotas.",
   },

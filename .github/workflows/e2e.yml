@@ -1375,6 +1375,7 @@ jobs:
         pdv-identificar-cliente.spec.ts
         pdv-identificar-cliente-estados.spec.ts
         pdv-ficha-cliente-dados.spec.ts
+        pdv-ficha-cliente-enderecos.spec.ts
 
       # ─── PARTE 6 — nasceu em 2026-09-28, e o orçamento de 24 min a pediu ───
       #
@@ -1587,6 +1588,8 @@ jobs:
       # por túnel. Os estados da busca ficam em `pdv-identificar-cliente`, com a rota interceptada.
       # `pdv-ficha-cliente-dados-homologacao` (US-016): mesmo motivo, depende da homologação do ERP por
       # túnel. Os estados da ficha ficam em `pdv-ficha-cliente-dados`, com as rotas interceptadas.
+      # `pdv-ficha-cliente-enderecos-homologacao` (US-017): mesmo motivo, depende da homologação do ERP
+      # por túnel. Os estados dos endereços ficam em `pdv-ficha-cliente-enderecos`, com as rotas interceptadas.
       FORA_DO_CI: >-
         cadastro-sem-confirmacao-de-email.spec.ts
         aviso-de-caso-chega-no-whatsapp.spec.ts
@@ -1598,6 +1601,7 @@ jobs:
         pdv-aba-lojas-editar-homologacao.spec.ts
         pdv-identificar-cliente-homologacao.spec.ts
         pdv-ficha-cliente-dados-homologacao.spec.ts
+        pdv-ficha-cliente-enderecos-homologacao.spec.ts
     steps:
       # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
       #

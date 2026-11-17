@@ -1,10 +1,12 @@
 "use client";
 /**
- * Ficha do cliente do PDV, somente leitura: bloco "Dados pessoais" de `GET /api/v1/pdv/clientes/{id}`.
+ * Ficha do cliente do PDV, somente leitura: blocos "Dados pessoais" e "Endereços (N)" de
+ * `GET /api/v1/pdv/clientes/{id}`.
  *
  * LGPD: CPF e data de nascimento vivem só no estado do react-query desta tela (`gcTime: 0`). Nunca
  * vão para URL, storage nem log; o CPF é exibido mascarado (`mascaraCpf`, quatro últimos dígitos).
- * Sem botão de editar, adicionar, remover ou selecionar: isso é de outras histórias.
+ * Sem botão de editar, adicionar, remover, tornar principal ou selecionar: isso é de outras histórias
+ * (edição de endereço depende da fatia E2 do ERP).
  */
 import { useQuery } from "@tanstack/react-query";
 
@@ -15,6 +17,18 @@ import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { mascaraCpf } from "@/lib/lgpd/mask";
 
+type Endereco = {
+  id: string;
+  cep: string;
+  uf: string;
+  cidade: string;
+  bairro: string;
+  endereco: string;
+  complemento: string | null;
+  principal: boolean;
+  loja_entrega: { codigo: string; sigla: string } | null;
+};
+
 type Ficha = {
   id: string;
   nome: string;
@@ -22,12 +36,19 @@ type Ficha = {
   email: string | null;
   cpf: string | null;
   data_nascimento: string | null;
+  enderecos?: Endereco[];
 };
 
 /** `1988-03-14` (ou com hora) vira `14/03/1988` sem passar por `Date`, que deslocaria o dia pelo fuso. */
 function dataBr(iso: string | null): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
   return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
+
+/** `13060000` ou `13060-000` vira `13060-000`; qualquer outra forma segue como veio. */
+function cepBr(cep: string): string {
+  const d = cep.replace(/\D/g, "");
+  return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : cep;
 }
 
 export function FichaDoCliente({ erpId }: { erpId: string | null }) {
@@ -129,25 +150,82 @@ export function FichaDoCliente({ erpId }: { erpId: string | null }) {
     { chave: "nascimento", rotulo: t("Data de nascimento"), valor: dataBr(c.data_nascimento) },
   ];
 
+  const enderecos = c.enderecos ?? [];
+
   return (
-    <section
-      className="flex min-w-0 flex-col gap-3 rounded-md border border-border p-4"
-      data-testid="ficha"
-    >
-      <h2 className="text-base font-semibold">{t("Dados pessoais")}</h2>
-      <dl className="flex flex-col gap-3">
-        {campos.map((f) => (
-          <div key={f.chave} className="flex min-w-0 flex-col" data-testid={`ficha-${f.chave}`}>
-            <dt className="text-xs text-text-muted">{f.rotulo}</dt>
-            <dd
-              className={f.valor ? "break-words" : "text-text-muted"}
-              data-testid={`ficha-${f.chave}-valor`}
-            >
-              {f.valor ?? naoInformado}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <div className="flex min-w-0 flex-col gap-4">
+      <section
+        className="flex min-w-0 flex-col gap-3 rounded-md border border-border p-4"
+        data-testid="ficha"
+      >
+        <h2 className="text-base font-semibold">{t("Dados pessoais")}</h2>
+        <dl className="flex flex-col gap-3">
+          {campos.map((f) => (
+            <div key={f.chave} className="flex min-w-0 flex-col" data-testid={`ficha-${f.chave}`}>
+              <dt className="text-xs text-text-muted">{f.rotulo}</dt>
+              <dd
+                className={f.valor ? "break-words" : "text-text-muted"}
+                data-testid={`ficha-${f.chave}-valor`}
+              >
+                {f.valor ?? naoInformado}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      <section
+        className="flex min-w-0 flex-col gap-3 rounded-md border border-border p-4"
+        data-testid="enderecos"
+      >
+        <h2 className="text-base font-semibold">{`${t("Endereços")} (${enderecos.length})`}</h2>
+        {enderecos.length === 0 ? (
+          <p className="text-sm text-text-muted" data-testid="enderecos-vazio">
+            {t("Este cliente ainda não tem endereço")}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {enderecos.map((e) => (
+              <li
+                key={e.id}
+                className="flex min-w-0 flex-col gap-1 rounded-md border border-border p-3"
+                data-testid="endereco"
+              >
+                {e.principal ? (
+                  <span
+                    className="bg-muted w-fit rounded-md px-2 py-0.5 text-xs font-semibold"
+                    data-testid="endereco-principal"
+                  >
+                    {t("Principal")}
+                  </span>
+                ) : null}
+                <p className="font-medium break-words" data-testid="endereco-linha">
+                  {e.endereco}
+                </p>
+                {e.complemento ? (
+                  <p className="text-sm break-words" data-testid="endereco-complemento">
+                    {e.complemento}
+                  </p>
+                ) : null}
+                <p className="text-sm break-words" data-testid="endereco-cidade">
+                  {`${e.bairro}, ${e.cidade}/${e.uf}`}
+                </p>
+                <p className="text-sm text-text-muted" data-testid="endereco-cep">
+                  {`${t("CEP")} ${cepBr(e.cep)}`}
+                </p>
+                {e.loja_entrega ? (
+                  <p className="text-sm font-semibold break-words" data-testid="endereco-loja">
+                    {`${t("Loja de entrega")}: ${e.loja_entrega.sigla}`}
+                  </p>
+                ) : (
+                  <p className="text-danger text-sm" data-testid="endereco-sem-loja">
+                    {t("Nenhuma loja entrega neste endereço")}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }
