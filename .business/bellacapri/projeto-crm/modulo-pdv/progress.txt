@@ -135,3 +135,12 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Ícone de `NAV_CATALOG` precisa estar em `ICONS` de `lib/navigation/registry.ts` (não só em `lib/ui/icons.ts`); `UserCircle` serve.
   - Tela de balcão do PDV mora sob `app/app/pdv/` com um `layout.tsx` único do módulo; as próximas (ficha, pedido) herdam o 404.
 ---
+
+## 2026-11-17 - US-012
+- Implementado: a tela da US-011 já cumpria os estados (inicial, vazio, DDD, CPF por `isValidCpf` com dígito verificador, esqueleto + Buscar desabilitado, nenhum resultado com termo mantido, erro com "Tentar de novo", `erp_nao_configurado` sem botão nem endereço); nenhuma mudança em código de produto. Entrou `tests/e2e/pdv-identificar-cliente-estados.spec.ts` (rota `/api/v1/pdv/*` interceptada; CPF 12345678900 com DV errado, ERP fora duas vezes seguidas e retry repetindo a mesma busca, 409 com endereço/chave na mensagem da API sem vazar na tela, sem botão de cadastro (ADR-002), carregando), registrada em `SPECS_PARTE_5` do e2e.yml; evidência `evidence/modulo-pdv/US-012.md` + 7 PNGs.
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings da base); e2e dos estados `1 passed (12.1s)` na stack isolada (3100, build de produção), rodado depois da última edição de spec; `pnpm test:unit` completo exit 1, `Test Files 6 failed | 2846 passed`, `Tests 23 failed | 31095 passed`, mesmas 23 falhas/6 arquivos da base, sem linha Errors. Sem schema: test:db não rodado. Stack e worktree isolados removidos.
+- Não houve spec de homologação nova. Não verificado: erro real do ERP (só interceptado); alvo de 44 px medido só no botão "Tentar de novo" (os demais foram medidos na US-011).
+- **Learnings:**
+  - Quando a história anterior já entrega a UI, a história de "estados" é só a spec; conferir o código antes de mexer evita retrabalho.
+  - Playwright usa a rota registrada por último primeiro: para trocar o atraso de uma rota já interceptada, basta registrar outra por cima.
+---
