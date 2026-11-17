@@ -471,10 +471,13 @@ const HOST_EM_URL = /https?:\/\/([a-z0-9][a-z0-9.-]*\.[a-z]{2,})/gi;
  *    `channel.ai_access_updated`, `conversation.ai_paused`,
  *    `lgpd.store_redact_received` e `env.APP_NAME` (6 falsos, todos com `_`
  *    logo depois do "TLD"). `_` não existe em nome de host, então barrá-lo não
- *    esconde host nenhum.
+ *    esconde host nenhum;
+ *  - `.letra` depois do "TLD" é mais um segmento do nome, não o fim de um host:
+ *    `pdv.store.updated` (evento de auditoria) casava como `pdv.store`. O TLD de
+ *    dois níveis (`com.br`) vem antes na alternância, então `x.com.br` segue casando.
  */
 const HOST_NU_EM_STRING =
-  /["'`](?:https?:\/\/)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com\.br|com|net|org|io|app|dev|ai|co|cloud|br|me|tv|edu|gov|info|xyz|site|online|shop|store))(?![a-z0-9_-])/gi;
+  /["'`](?:https?:\/\/)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com\.br|com|net|org|io|app|dev|ai|co|cloud|br|me|tv|edu|gov|info|xyz|site|online|shop|store))(?![a-z0-9_-]|\.[a-z])/gi;
 
 /**
  * Host que não é terceiro porque não resolve para ninguém: TLD reservado para
@@ -1251,6 +1254,8 @@ describe("catraca de host de terceiro no código que embarca", () => {
     expect(hostsNoTexto('action: "channel.ai_access_updated",')).toEqual([]);
     expect(hostsNoTexto('action: "conversation.ai_paused",')).toEqual([]);
     expect(hostsNoTexto('action: "lgpd.store_redact_received",')).toEqual([]);
+    expect(hostsNoTexto('action: "pdv.store.updated",')).toEqual([]);
+    expect(hostsNoTexto('const u = "loja.com.br";')).toEqual(["loja.com.br"]);
     expect(hostsNoTexto("`env.APP_NAME` cru")).toEqual([]);
   });
 

@@ -1386,6 +1386,8 @@ export const AUDIT_ACTIONS = [
   // sugestão, e quando". A fila guarda o usuário, mas a trilha é o rastro que a
   // organização consulta, e só ela tem o mesmo formato das outras ações de contato.
   "contact.duplicate_dismissed",
+  /** Módulo PDV: loja adicionada do ERP, ativada/desativada ou ligada a uma conexão de WhatsApp. */
+  "pdv.store.updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
