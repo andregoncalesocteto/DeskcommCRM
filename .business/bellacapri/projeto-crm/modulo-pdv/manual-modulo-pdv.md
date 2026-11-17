@@ -279,7 +279,7 @@ Pendências **suas**, em ordem:
    Sem `PDV_HOMOLOGACAO=1` elas se **pulam** (não reprovam). Cada uma lê no cabeçalho as
    variáveis extras que precisa. Os seletores delas **nunca rodaram**: se alguma falhar,
    desconfie primeiro da spec, não só do módulo.
-5. Guarde os screenshots (`us-007-homologacao.png` etc.) em `evidence/modulo-pdv/` e
+5. Guarde os screenshots que as specs de homologação gravam em `evidence/modulo-pdv/` (um por tela, com o sufixo `-homologacao`) e
    atualize a coluna "com ERP real" da seção J60.
 
 **Premissas do contrato a confirmar com o ERP** (`contrato-mcp-erp-formatos.md`): cliente com
