@@ -16248,6 +16248,19 @@ export const DICIONARIO: Traducoes = {
     es: "Módulos opcionales con tabla propia, creados cuando los instalas — quien no instala no carga sus tablas. Instalar aquí vale para todas las organizaciones de esta instalación.",
   },
   "Honorários": { es: "Honorarios" },
+  "Lojas": { es: "Tiendas" },
+  "As lojas do ERP que este tenant atende no balcão e no telefone.": {
+    es: "Las tiendas del ERP que este tenant atiende en el mostrador y por teléfono.",
+  },
+  "Carregando as lojas": { es: "Cargando las tiendas" },
+  "Não foi possível carregar as lojas.": { es: "No se pudieron cargar las tiendas." },
+  "O ERP ainda não está configurado nesta instalação.": { es: "El ERP aún no está configurado en esta instalación." },
+  "Peça ao dono da instalação para cadastrar o endereço e a chave do ERP em Configurações da instalação. Depois disso, volte aqui para adicionar as lojas.": {
+    es: "Pide al dueño de la instalación que registre la dirección y la clave del ERP en la configuración de la instalación. Después vuelve aquí para añadir las tiendas.",
+  },
+  "Este tenant ainda não tem lojas": { es: "Este tenant aún no tiene tiendas" },
+  "Quando você adicionar lojas do ERP, elas aparecem aqui.": { es: "Cuando añadas tiendas del ERP, aparecerán aquí." },
+  "Código do ERP": { es: "Código del ERP" },
   "O modelo de cobrança de cada caso e o calendário de parcelas.": {
     es: "El modelo de cobro de cada caso y el calendario de cuotas.",
   },

@@ -1369,6 +1369,7 @@ jobs:
         honorarios-instalar-e-pagar.spec.ts
         reenvio-pelo-celular.spec.ts
         pdv-instalar-modulo.spec.ts
+        pdv-aba-lojas-lista.spec.ts
 
       # ─── PARTE 6 — nasceu em 2026-09-28, e o orçamento de 24 min a pediu ───
       #
@@ -1568,12 +1569,18 @@ jobs:
       # em `cobranca-revendedor`, contra o dublê que assina os avisos de
       # verdade. Só esta prova que a Stripe real ainda responde o contrato da
       # versão fixada. Sem a chave, ela pula; o cabeçalho tem a receita.
+      #
+      # `pdv-aba-lojas-lista-homologacao` entrou aqui com a US-007 do módulo PDV: depende da
+      # homologação do ERP por túnel. O caminho feliz lista as lojas que o ERP de homologação
+      # devolve, e o runner do CI não alcança esse endereço nem guarda a chave dele. O CI prova
+      # os estados da mesma tela em `pdv-aba-lojas-lista`, com as rotas do PDV interceptadas.
       FORA_DO_CI: >-
         cadastro-sem-confirmacao-de-email.spec.ts
         aviso-de-caso-chega-no-whatsapp.spec.ts
         jev-chave-real.spec.ts
         modelos-do-parceiro-editar-apagar.spec.ts
         cobranca-stripe-teste.spec.ts
+        pdv-aba-lojas-lista-homologacao.spec.ts
     steps:
       # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
       #

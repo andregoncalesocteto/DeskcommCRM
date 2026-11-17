@@ -458,6 +458,19 @@ export const NAV_CATALOG = [
     // SEM `sidebar`, como a tela-mãe de Propostas: chega-se por Configurações.
   },
   {
+    // As lojas do ERP que o tenant atende (módulo PDV, ADR-0001). Fica em "Sua empresa" porque é
+    // onde o negócio se descreve; sem `sidebar`, como as demais telas de settings/tenant. A porta
+    // só existe com o módulo `pdv` instalado em `/admin/modulos`; a rota e a tela recusam (404).
+    href: "/app/settings/tenant/lojas",
+    label: "Lojas",
+    description: "As lojas do ERP que este tenant atende no balcão e no telefone.",
+    icon: "Storefront",
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+    modulo: "pdv",
+  },
+  {
     // O BALCÃO. Fica em CRM, e não em Configurações, porque é uso diário de quem
     // está com a cliente na frente — a tela irmã, em Configurações › Financeiro,
     // é onde o negócio se descreve uma vez.
