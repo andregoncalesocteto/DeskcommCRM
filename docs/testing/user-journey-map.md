@@ -4105,3 +4105,33 @@ terão trace/vídeo. Não foi medido download na janela anterior à persistênci
 do worker, viewer PDF ou aplicativo externo. O PASS de UX deste head não
 substitui os cinco checks obrigatórios: o verify antigo falhou no teste de
 relógio, cujo reparo central entra pela composição da main, sem repetir a rodada antiga.
+
+## J60 — Módulo PDV: lojas do ERP e ficha do cliente `[P0]` (instalar e ligar) / `[P1]` (rotina) (2026-11-17)
+
+Contexto: módulo opcional PDV, fases 1 e 2 (`docs/features/modulo-pdv.md`). Desligado por padrão: ligar é instalar
+em `/admin/modulos`, e quem opera depois cadastra as lojas do ERP e identifica o cliente. P0 só no que é primeira
+impressão do módulo (instalar e ligar); o resto é rotina de quem atende. Por ser módulo de tabela, a instalação
+fresca roda a provisionadora `fn_pdv_provisionar()`, provada em `tests/invariants/pdv-*.test.ts` (test:db).
+
+Specs: `tests/e2e/pdv-*.spec.ts` (parte 5 do CI), todas com `/api/v1/pdv/**` **interceptado** (o ERP não existe na
+stack de teste). As `tests/e2e/pdv-*-homologacao.spec.ts` (lojas: lista, adicionar, editar; identificar cliente;
+ficha: dados e endereços) foram **escritas mas NÃO executadas**: dependem da homologação do ERP por túnel HTTPS,
+estão em `FORA_DO_CI` e pulam sem `PDV_HOMOLOGACAO=1`. Evidência dos estados com rota interceptada, medida por
+`getBoundingClientRect` (alvos >= 44 px): `evidence/modulo-pdv/`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J60.1 `[P0]` | Instalar o módulo PDV em `/admin/modulos` | o cartão passa a "Instalado" e o botão some; reinstalar não falha nem duplica; sem instalar, o módulo segue desligado | PASS (e2e `pdv-instalar-modulo`, invariante `pdv-instalar-modulo`) |
+| J60.2 `[P0]` | Módulo desligado | rotas `/api/v1/pdv/*` e telas respondem 404; nenhuma tabela do PDV existe | rota coberta por UNIT; 404 de tela **não** provado no browser |
+| J60.3 `[P0]` | ERP não configurado (estado real de uma instalação nova) | a tela de Lojas e a de Identificar cliente orientam a procurar o dono da instalação, sem botão de repetir nem endereço ou chave na tela | PASS (e2e interceptado, 409 `erp_nao_configurado`) |
+| J60.4 `[P1]` | Lojas: lista, vazio, carregando, erro com "Tentar de novo" | cinco estados, alvos >= 44 px | PASS (e2e `pdv-aba-lojas-lista`); com ERP real: **não executado** |
+| J60.5 `[P1]` | Adicionar lojas do ERP | já adicionadas marcadas e desabilitadas; confirmar grava com nome, código e sigla do ERP; falha mantém a seleção | PASS (e2e `pdv-aba-lojas-adicionar`); com ERP real: **não executado** |
+| J60.6 `[P1]` | Ativar/desativar loja e vincular conexão de WhatsApp | rascunho só grava no Salvar; Cancelar descarta; falha mantém o rascunho | PASS (e2e `pdv-aba-lojas-editar`); com ERP real: **não executado** |
+| J60.7 `[P1]` | Identificar cliente: busca por telefone, nome ou CPF | validação local (DDD, CPF com dígito verificador), esqueleto, nenhum cliente, erro do ERP com repetir a mesma busca; sem botão de cadastro; o termo não vai a URL nem storage | PASS (e2e `pdv-identificar-cliente` e `-estados`); com ERP real: **não executado** |
+| J60.8 `[P1]` | Ver a ficha: dados pessoais | CPF mascarado, "Não informado" para ausente, nome longo sem rolagem horizontal; 404 do ERP e contato ambíguo com orientação | PASS (e2e `pdv-ficha-cliente-dados`); com ERP real: **não executado** |
+| J60.9 `[P1]` | Ver a ficha: endereços | selo "Principal", "Loja de entrega" ou "Nenhuma loja entrega neste endereço", vazio, texto longo contido, nenhum botão | PASS (e2e `pdv-ficha-cliente-enderecos`); com ERP real: **não executado** |
+| J60.10 `[P1]` | Dois clientes do ERP no mesmo telefone/CPF; dois atendentes abrindo o mesmo cliente ao mesmo tempo | um só contato e um só vínculo; ambiguidade vira 409, nunca fusão silenciosa | PASS (UNIT `contato-espelho`, invariante `pdv-contato-espelho-unicidade` com duas sessões psql) |
+
+**NÃO COBERTO, declarado:** nenhum caso rodou contra o ERP real nem pelo túnel HTTPS (as seis specs de homologação
+estão escritas e nunca executadas); papel `viewer` no browser; 404 de módulo desligado na tela; limite de taxa da
+busca com Redis real; edição de endereço, cadastro de cliente e pedido (não existem).

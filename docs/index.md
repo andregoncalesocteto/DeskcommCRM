@@ -54,6 +54,7 @@ de menor precedência e registre.
 | [`prd/06-prd-nuvemshop-lgpd.md`](prd/06-prd-nuvemshop-lgpd.md) | Integração Nuvemshop + webhooks LGPD |
 | [`business-rules/00-business-rules-catalog.md`](business-rules/00-business-rules-catalog.md) | **Catálogo de regras de negócio** — fonte da verdade fora do código |
 | [`features/feature-a-leadsubmitted-ctwa.md`](features/feature-a-leadsubmitted-ctwa.md) | Feature A portada: LeadSubmitted por clique CTWA recebido, evidência do fork e validações pendentes do upstream |
+| [`features/modulo-pdv.md`](features/modulo-pdv.md) | Módulo PDV (balcão e telefone), fases 1 e 2: lojas do ERP e ficha do cliente; o que existe, o que falta e os limites |
 | [`presentation/pitch-deck.md`](presentation/pitch-deck.md) | Pitch |
 
 ## 3. Contrato técnico (specs)
