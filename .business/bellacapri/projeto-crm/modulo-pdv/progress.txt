@@ -113,3 +113,12 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Se `pnpm e2e:build` falhar com "bundle contém o host de produção", apague `.env.local` do worktree e refaça (o `cp .env.e2e .env.local` só vem DEPOIS do build). A mensagem de segurança do Next pode abortar várias vezes seguidas; repetir o mesmo comando.
   - Rascunho por linha sem useEffect: estado `undefined` = "sem override" e valor efetivo = `override ?? loja`; `mudou` é derivado e zera sozinho quando a lista é refeita.
 ---
+
+## 2026-11-16 - US-010
+- Implementado: `GET /api/v1/pdv/clientes?modo=telefone|nome|cpf&q=` (`requireRole("agent")`, portão do módulo -> 404, limite de taxa 60/min por usuário via `checkRateLimit` com 429 + Retry-After, Zod `modo` enum e `q` trim 1..100 -> 422 sem eco do valor). Chama `buscarCliente` e devolve só `id`, `nome`, `endereco_principal`, `total_encontrado`, `truncado` (campos extras do ERP são descartados). `respostaDoErroDoErp` ganhou `termo_invalido` -> 422 `validation_failed` com a mensagem do ERP. Rota não audita (leitura) e não loga: o termo não vai a log, Sentry nem auditoria. Testes: `app/api/v1/pdv/clientes/route.test.ts` (18 casos, inclui espionagem de console provando que CPF/telefone não aparecem em log nem resposta).
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2846 passed`, `Tests 23 failed | 31090 passed`, mesmas 23 falhas/6 arquivos da linha de base, sem linha Errors. Sem schema: test:db não rodado. Sem UI: sem e2e.
+- Não verificado: ERP real; Sentry não é chamado pela rota (nenhum captureException), então a garantia é por ausência de código; limite de taxa real com Redis (mockado).
+- **Learnings:**
+  - `termo_invalido` agora é traduzido em `lib/pdv/api.ts` (422 `validation_failed`); rotas de PDV futuras que chamem o ERP com termo do usuário herdam isso.
+  - `checkRateLimit` (`lib/ai/dispatcher/rate-limit`) é o padrão de limite por usuário em rota; mocke-o nos testes.
+---
