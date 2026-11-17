@@ -90,3 +90,14 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Porta de aba de config de tenant: entrada em `NAV_CATALOG` com `modulo`, sem `sidebar`; o 404 de módulo desligado mora num `layout.tsx` da pasta (padrão de `settings/tenant/proposals`).
   - O Playwright interceptado com um único `page.route("**/api/v1/pdv/**")` diferencia `/lojas` de `/lojas/erp` por `pathname.endsWith`; `page.unroute` entre cenários.
 ---
+
+## 2026-11-16 - US-008
+- Implementado: modal `app/app/settings/tenant/lojas/_adicionar.tsx` (shadcn Dialog; lista `GET /pdv/lojas/erp`, já adicionadas marcadas e desabilitadas com "Já adicionada", confirmar = `POST /pdv/lojas` com `{codigo, sigla}` do ERP; sucesso invalida `["pdv","lojas"]`, toast "Lojas adicionadas" e fecha; estados carregando, erro do ERP com "Tentar de novo", nenhuma nova, falha ao salvar mantendo seleção). `_client.tsx` ganhou o botão "Adicionar lojas do ERP" (o conteúdo antigo virou `Conteudo`). 8 textos es no dicionário. Specs: `pdv-aba-lojas-adicionar.spec.ts` (em `SPECS_PARTE_5`) e `pdv-aba-lojas-adicionar-homologacao.spec.ts` (em `FORA_DO_CI`, com comentário do motivo 'depende da homologação do ERP por túnel'; pula sem `PDV_HOMOLOGACAO=1`). Evidência: `evidence/modulo-pdv/US-008.md` + 6 PNGs.
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings, igual à base); e2e dos estados `1 passed (15.7s)` rodado DEPOIS da última edição de código/spec (stack isolada, build de produção, alturas >= 44 px medidas por getBoundingClientRect); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2845 passed`, `Tests 23 failed | 31069 passed`, mesmas 23 falhas/6 arquivos da linha de base, sem linha Errors. Sem schema: test:db não rodado. Stack/worktree isolados removidos.
+- NÃO executado: `pdv-aba-lojas-adicionar-homologacao.spec.ts` (depende da homologação do ERP por túnel; fica para um humano, com o screenshot `us-008-homologacao.png`). Não verificado: POST real contra o banco (a spec intercepta as rotas; a rota é coberta por `escrita.test.ts`); toast só provado por texto visível, não por layout; a spec de homologação nunca rodou, então seus seletores (`span.font-mono` para a sigla) não foram exercitados.
+- **Learnings:**
+  - `useEffect` com `setState` para resetar estado ao abrir dispara o warning do React Compiler (`set-state-in-effect`) e sobe a contagem de warnings; resetar no handler de fechar (`onOpenChange`) resolve.
+  - O build de produção do e2e emite aviso de segurança do Next na 1a rodada; repetir o mesmo `pnpm e2e:build` passa (saída de ferramenta, não executar `next upgrade`).
+  - `ja_cadastrada` já vem na rota `/pdv/lojas/erp` (US-005): o modal não precisa cruzar com a lista do tenant.
+  - Toast do `sonner` aparece como texto exato "Lojas adicionadas": `getByText(..., { exact: true })` basta.
+---
