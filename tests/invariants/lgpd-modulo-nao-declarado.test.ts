@@ -98,6 +98,12 @@ const ALLOWLIST: Record<string, string> = {
     "ex.: Campinas), sem ligação com contato nem texto sobre pessoa: o que derruba a " +
     "régua é o regex achar a palavra `nome`, não o dado. Declarar seção faria a " +
     "anonimização de um contato mexer em loja da organização inteira.",
+  "pdv.pdv_customer_links":
+    "pdv_customer_links liga contato a cliente do ERP só por ids opacos (contact_id, " +
+    "erp_customer_id) e pela data do vínculo, sem texto sobre a pessoa: não há coluna a " +
+    "anonimizar, e erp_customer_id é a chave not null do vínculo. O contato anonimizado vira " +
+    "'Cliente Anonimizado #N'; o apagamento do cliente se cumpre no ERP, dono do cadastro " +
+    "(ADR-002 do módulo), e hard delete do contato leva a ligação junto (on delete cascade).",
   "financeiro.loyalty_ledger":
     "Decisão escrita do #1504 (razão `manter` de " +
     "lgpd-redact-unificado-alcanca-pelo-catalogo.test.ts): o extrato de pontos " +
