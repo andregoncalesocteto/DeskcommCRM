@@ -57,8 +57,9 @@ de núcleo e fica como plano B.
 
 ## Limites conhecidos
 
-- **Nada foi provado contra o ERP real.** As histórias foram entregues sobre fixtures e
-  interceptação de rota. As specs `tests/e2e/pdv-*-homologacao.spec.ts` foram **escritas
+- **Prova contra o ERP real só à mão.** As histórias foram entregues sobre fixtures e
+  interceptação de rota; em 2026-11-17 o dono conferiu as telas contra o ERP real, pelo túnel
+  HTTPS, nos 3 tenants (relato, sem spec nem registro por caso). As specs `tests/e2e/pdv-*-homologacao.spec.ts` foram **escritas
   mas não executadas**: dependem da homologação do ERP por túnel, ficam em `FORA_DO_CI` e
   pulam sem `PDV_HOMOLOGACAO=1`. Evidência visual dos estados (com rota interceptada) em
   `evidence/modulo-pdv/`.
