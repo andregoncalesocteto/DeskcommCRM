@@ -176,3 +176,15 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - `vi.mock(..., async (orig) => ...)` com `import()` de tipo gera warning de lint; use `import type * as x` + `orig<typeof x>()`.
   - Params mockados de rota dinâmica não são URL-decodificados: teste de id vazio usa espaços literais.
   - O lint total sobe de 629 para 630 se um warning novo escapar: conferir `npx eslint <dir novo>`.
+
+## 2026-11-17 - US-016
+- Implementado: `app/app/pdv/clientes/_ficha.tsx` (novo, `FichaDoCliente`) e `_client.tsx` em duas colunas (`lg:grid-cols-[28rem_1fr]`): candidatos viram `button` (`aria-pressed`, min 56 px); escolher um, ou o resultado único da busca, abre a ficha via `GET /api/v1/pdv/clientes/{id}` (react-query, `gcTime: 0`). Bloco "Dados pessoais" (nome, telefone, e-mail, CPF por `mascaraCpf` de `lib/lgpd/mask.ts` = `***.***.*47-25`, nascimento dd/mm/aaaa sem `Date`), "Não informado" para ausente, `break-words` no nome. Estados: nenhum selecionado, esqueleto, erro com "Tentar de novo" (409 `erp_nao_configurado` sem botão), 404 "Cliente não encontrado no ERP", 409 `contato_ambiguo` (orientação, sem retry). Sem botão algum na ficha. Troca de busca/modo zera a escolha. 8 textos novos no dicionário es. Porta: a tela já tinha `NAV_CATALOG` (US-011), nenhuma rota nova.
+- Specs: `tests/e2e/pdv-ficha-cliente-dados.spec.ts` (em `SPECS_PARTE_5`, `/api/v1/pdv/*` interceptado) e `pdv-ficha-cliente-dados-homologacao.spec.ts` (em `FORA_DO_CI`, motivo 'depende da homologação do ERP por túnel'; pula sem `PDV_HOMOLOGACAO=1`). Evidência: `evidence/modulo-pdv/US-016.md` + 8 PNGs.
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings = base); e2e dos estados `1 passed (17.3s)` DEPOIS da última edição de código/spec (stack isolada na 3100, build de produção; candidatos e "Tentar de novo" >= 44 px, sem rolagem horizontal com nome longo, CPF/nascimento fora de URL e storage); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2848 passed`, `Tests 23 failed | 31127 passed`, mesmas 23 falhas/6 arquivos da base, sem linha Errors. Sem schema: test:db não rodado. Stack e worktree isolados removidos.
+- NÃO executado: `pdv-ficha-cliente-dados-homologacao.spec.ts` (depende da homologação do ERP; humano, depois, com `us-016-homologacao.png`; seus seletores nunca rodaram). Não verificado: ficha contra o ERP real; papel `viewer` no browser; endereços na ficha (US-017).
+- **Learnings:**
+  - Para esperar o `test:unit` em background, não use `pgrep -f "vitest run"`: casa shells antigos que citam a string. Espere pelo PID do `sh -c vitest run`.
+  - O `cp` de arquivos do checkout para o worktree isolado basta (o worktree nasce do HEAD, sem o trabalho não commitado); depois copie só os PNGs de volta.
+  - `mascaraCpf` (lib/lgpd/mask.ts) é função pura, importável em componente cliente.
+  - O corpo da ficha traz `enderecos`; a US-017 pode reutilizar a mesma query (`["pdv","cliente",id]`).
+---
