@@ -28,8 +28,9 @@ test.describe("PDV: adicionar lojas contra a homologação do ERP", () => {
 
     const modal = page.getByTestId("adicionar-lojas-modal");
     await expect(page.getByTestId("adicionar-lista"), "o ERP de homologação não devolveu lojas novas").toBeVisible({ timeout: 30_000 });
-    const livre = modal.locator('input[type="checkbox"]:not(:disabled)').first();
-    const linha = modal.locator("li").filter({ has: livre });
+    // `has:` é relativo ao <li>: o filtro tem de ser um locator solto, não um escopado ao modal.
+    const linha = modal.locator("li").filter({ has: page.locator('input[type="checkbox"]:not(:disabled)') }).first();
+    const livre = linha.locator('input[type="checkbox"]');
     const sigla = (await linha.locator("span.font-mono").innerText()).trim();
     await livre.check();
     await modal.getByRole("button", { name: "Adicionar", exact: true }).click();
