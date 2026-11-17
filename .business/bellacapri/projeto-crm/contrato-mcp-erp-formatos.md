@@ -23,6 +23,8 @@ Complementa: [contrato-mcp-erp.md](contrato-mcp-erp.md) (quem usa, regras gerais
 
 **Erros comuns a todas as ferramentas:** `nao_autorizado`, `erp_indisponivel`, `tempo_esgotado`.
 
+**Falha de autenticação (decisão de 2026-11-17).** `isError` só existe em `tools/call`. Chave ausente ou inválida pode ser recusada **antes** da camada de ferramentas, em qualquer método (`initialize`, `tools/list`, `tools/call`), com **HTTP 401**, `WWW-Authenticate: Bearer` e o mesmo JSON `{ "codigo": "nao_autorizado", "mensagem": ... }` no corpo. O CRM aceita as duas formas e **não lê o corpo do 401**: trata como falha de conexão e mostra "ERP indisponível" ao operador. Chave inválida não é distinguida de ERP fora do ar na tela, só no registro do ERP.
+
 ---
 
 ## Fatia E0
