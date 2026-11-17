@@ -361,6 +361,10 @@ export const ApiErrorCodes = {
   wacalls_error: "wacalls_error", // 502: o serviço de chamada de voz recusou ou não respondeu
   wacalls_not_connected: "wacalls_not_connected", // 503 + Retry-After: sessão pareada cujo socket com o WhatsApp caiu por um instante (ver `wacallsSemConexao`)
   ai_provider_error: "ai_provider_error",
+  // Módulo PDV: o ERP do tenant. `erp_nao_configurado` = 409 (falta cadastrar o servidor),
+  // `erp_indisponivel` = 502 (o servidor não respondeu ou respondeu algo ilegível).
+  erp_nao_configurado: "erp_nao_configurado",
+  erp_indisponivel: "erp_indisponivel",
   nuvemshop_error: "nuvemshop_error",
 } as const;
 
