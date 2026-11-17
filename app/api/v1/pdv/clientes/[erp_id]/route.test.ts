@@ -116,6 +116,21 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
     expect(data.enderecos[1].loja_entrega).toBeNull();
   });
 
+  it("ERP sem endereço principal: principal ausente sai como false na API", async () => {
+    vi.mocked(obterCliente).mockResolvedValue({
+      ...CLIENTE,
+      enderecos: [
+        { id: "e-1", cep: "13060000", uf: "SP", cidade: "Campinas", bairro: "Centro", endereco: "Rua A, 1", complemento: null, loja_entrega: null },
+      ],
+    });
+    const res = await chamar();
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.enderecos).toHaveLength(1);
+    expect(data.enderecos[0].principal).toBe(false);
+    expect(data.enderecos[0].loja_entrega).toBeNull();
+  });
+
   it("sem endereço: lista vazia, e CPF/nascimento ausentes viram null", async () => {
     vi.mocked(obterCliente).mockResolvedValue({
       ...CLIENTE,

@@ -17,7 +17,9 @@ export type ListaDeLojas = z.infer<typeof ListaDeLojasSchema>;
 export const ClienteResumoSchema = z.object({
   id: z.string(),
   nome: z.string(),
-  endereco_principal: z.string().nullable(),
+  // O ERP real não tem endereço principal e omite a chave (devolutiva E0/E1, divergência 5 e 6):
+  // ausente e null significam o mesmo, "sem endereço para mostrar". A API normaliza para null.
+  endereco_principal: z.string().nullable().optional(),
 });
 export type ClienteResumo = z.infer<typeof ClienteResumoSchema>;
 
@@ -36,7 +38,8 @@ export const EnderecoSchema = z.object({
   bairro: z.string(),
   endereco: z.string(),
   complemento: z.string().nullable(),
-  principal: z.boolean(),
+  // Idem: o ERP real não marca endereço principal. Ausente = nenhum endereço marcado.
+  principal: z.boolean().optional(),
   loja_entrega: z.object({ codigo: z.string(), sigla: z.string() }).nullable(),
 });
 export type Endereco = z.infer<typeof EnderecoSchema>;

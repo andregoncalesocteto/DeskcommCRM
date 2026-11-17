@@ -76,7 +76,8 @@ export async function GET(
         email: cliente.email,
         cpf: cliente.cpf ?? null,
         data_nascimento: cliente.data_nascimento ?? null,
-        enderecos: cliente.enderecos,
+        // O ERP pode não marcar endereço principal: a API sempre devolve o booleano.
+        enderecos: cliente.enderecos.map((e) => ({ ...e, principal: e.principal ?? false })),
       },
       { requestId },
     );

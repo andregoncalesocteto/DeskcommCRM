@@ -1,0 +1,22 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "structuredContent": {
+    "clientes": [
+      {
+        "id": "1001",
+        "nome": "MARIA EXEMPLO DA SILVA"
+      },
+      {
+        "id": "1002",
+        "nome": "MARIA EXEMPLO SOUZA"
+      }
+    ],
+    "total_encontrado": 7,
+    "truncado": true
+  }
+}

@@ -9,6 +9,7 @@ export const CODIGOS_DE_ERRO_DO_ERP = [
   "nao_autorizado",
   "erp_indisponivel",
   "tempo_esgotado",
+  "erro_interno",
 ] as const;
 
 export type CodigoDeErroDoErp =

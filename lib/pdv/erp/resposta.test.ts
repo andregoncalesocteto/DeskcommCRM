@@ -124,6 +124,27 @@ describe("lerResultado: bordas", () => {
   });
 
   it("todo arquivo da pasta de fixtures é coberto por um teste", () => {
-    expect(readdirSync(DIR)).toHaveLength(15);
+    expect(readdirSync(DIR)).toHaveLength(18);
+  });
+});
+
+describe("formato real do ERP (devolutiva E0/E1): sem endereço principal", () => {
+  it("buscar-formato-real: lista sem endereco_principal é válida", () => {
+    const r = lerResultado(fixture("buscar-formato-real"), ResultadoBuscaSchema);
+    expect(r.clientes.map((c) => c.id)).toEqual(["1001", "1002"]);
+    expect(r.clientes[0]?.endereco_principal).toBeUndefined();
+    expect(r.truncado).toBe(true);
+  });
+
+  it("obter-cliente-formato-real: endereço sem principal e sem loja é válido", () => {
+    const { cliente } = lerResultado(fixture("obter-cliente-formato-real"), ObterClienteSchema);
+    expect(cliente.enderecos[0]?.principal).toBeUndefined();
+    expect(cliente.enderecos[0]?.loja_entrega).toBeNull();
+    expect(cliente.cpf).toBe("00000000000");
+  });
+
+  it("erro-erro-interno: é erro conhecido, não resposta inválida", () => {
+    const e = erroDe("erro-erro-interno");
+    expect(e.codigo).toBe("erro_interno");
   });
 });

@@ -3,7 +3,7 @@
  *
  * Bloco "Endereços (N)" somente leitura abaixo dos dados pessoais, com `/api/v1/pdv/*` INTERCEPTADA
  * (nada fala com o ERP). Afirma: um card por endereço com selo "Principal", endereço, complemento,
- * bairro/cidade/UF, CEP e "Loja de entrega: <sigla>" ou "Nenhuma loja entrega neste endereço";
+ * bairro/cidade/UF, CEP e "Loja de entrega: <sigla>" ou "Loja de entrega ainda não definida";
  * cliente sem endereço; endereço muito longo sem estourar o layout; e nenhum botão de alterar,
  * remover, tornar principal ou adicionar. Medidas com `getBoundingClientRect`.
  */
@@ -159,7 +159,7 @@ test.describe("PDV: ficha do cliente, endereços", () => {
     await expect(c1.getByTestId("endereco-loja")).toHaveText("Loja de entrega: CEN");
     const c2 = cards.nth(2);
     await expect(c2.getByTestId("endereco-sem-loja")).toHaveText(
-      "Nenhuma loja entrega neste endereço",
+      "Loja de entrega ainda não definida",
     );
     await expect(page.getByTestId("endereco-principal")).toHaveCount(1);
 

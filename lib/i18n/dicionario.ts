@@ -16310,7 +16310,7 @@ export const DICIONARIO: Traducoes = {
   "Principal": { es: "Principal" },
   "CEP": { es: "CEP" },
   "Loja de entrega": { es: "Tienda de entrega" },
-  "Nenhuma loja entrega neste endereço": { es: "Ninguna tienda entrega en esta dirección" },
+  "Loja de entrega ainda não definida": { es: "Tienda de entrega aún no definida" },
   "O modelo de cobrança de cada caso e o calendário de parcelas.": {
     es: "El modelo de cobro de cada caso y el calendario de cuotas.",
   },

@@ -1,0 +1,9 @@
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"codigo\": \"erro_interno\", \"mensagem\": \"Erro inesperado no ERP.\"}"
+    }
+  ]
+}

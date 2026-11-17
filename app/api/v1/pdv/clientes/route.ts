@@ -65,7 +65,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         clientes: r.clientes.map((c) => ({
           id: c.id,
           nome: c.nome,
-          endereco_principal: c.endereco_principal,
+          endereco_principal: c.endereco_principal ?? null,
         })),
         total_encontrado: r.total_encontrado,
         truncado: r.truncado,

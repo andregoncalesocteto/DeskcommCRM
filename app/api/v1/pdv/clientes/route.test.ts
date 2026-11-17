@@ -47,6 +47,18 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("GET /api/v1/pdv/clientes", () => {
+  it("ERP sem endereço principal: a chave ausente sai como null na API", async () => {
+    vi.mocked(buscarCliente).mockResolvedValue({
+      clientes: [{ id: "1001", nome: "Maria" }],
+      total_encontrado: 1,
+      truncado: false,
+    });
+    const res = await GET(url("nome", "maria"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.clientes).toEqual([{ id: "1001", nome: "Maria", endereco_principal: null }]);
+  });
+
   it.each([
     ["telefone", TELEFONE],
     ["nome", "maria"],

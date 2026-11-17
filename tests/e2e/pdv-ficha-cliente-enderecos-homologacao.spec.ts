@@ -11,7 +11,7 @@
  * e guardar o screenshot em `evidence/modulo-pdv/us-017-homologacao.png`.
  *
  * O caminho: o atendente busca por nome, escolhe o primeiro candidato e vê "Endereços (N)", cada
- * card com a linha "Loja de entrega: <sigla>" ou "Nenhuma loja entrega neste endereço", sem botão.
+ * card com a linha "Loja de entrega: <sigla>" ou "Loja de entrega ainda não definida", sem botão.
  */
 import * as path from "node:path";
 

@@ -217,8 +217,8 @@ export function FichaDoCliente({ erpId }: { erpId: string | null }) {
                     {`${t("Loja de entrega")}: ${e.loja_entrega.sigla}`}
                   </p>
                 ) : (
-                  <p className="text-danger text-sm" data-testid="endereco-sem-loja">
-                    {t("Nenhuma loja entrega neste endereço")}
+                  <p className="text-text-muted text-sm" data-testid="endereco-sem-loja">
+                    {t("Loja de entrega ainda não definida")}
                   </p>
                 )}
               </li>

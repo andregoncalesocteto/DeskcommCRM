@@ -1,0 +1,30 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "structuredContent": {
+    "cliente": {
+      "id": "1001",
+      "nome": "MARIA EXEMPLO DA SILVA",
+      "telefone": "+5500900000000",
+      "email": "maria@exemplo.invalid",
+      "enderecos": [
+        {
+          "id": "2001",
+          "cep": "00000000",
+          "uf": "SP",
+          "cidade": "Cidade Exemplo",
+          "bairro": "Bairro Exemplo",
+          "endereco": "Rua Exemplo, 100",
+          "complemento": null,
+          "loja_entrega": null
+        }
+      ],
+      "cpf": "00000000000",
+      "data_nascimento": "1990-01-31"
+    }
+  }
+}

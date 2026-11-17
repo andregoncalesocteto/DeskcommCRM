@@ -4129,7 +4129,7 @@ estão em `FORA_DO_CI` e pulam sem `PDV_HOMOLOGACAO=1`. Evidência dos estados c
 | J60.6 `[P1]` | Ativar/desativar loja e vincular conexão de WhatsApp | rascunho só grava no Salvar; Cancelar descarta; falha mantém o rascunho | PASS (e2e `pdv-aba-lojas-editar`); com ERP real: **não executado** |
 | J60.7 `[P1]` | Identificar cliente: busca por telefone, nome ou CPF | validação local (DDD, CPF com dígito verificador), esqueleto, nenhum cliente, erro do ERP com repetir a mesma busca; sem botão de cadastro; o termo não vai a URL nem storage | PASS (e2e `pdv-identificar-cliente` e `-estados`); com ERP real: **não executado** |
 | J60.8 `[P1]` | Ver a ficha: dados pessoais | CPF mascarado, "Não informado" para ausente, nome longo sem rolagem horizontal; 404 do ERP e contato ambíguo com orientação | PASS (e2e `pdv-ficha-cliente-dados`); com ERP real: **não executado** |
-| J60.9 `[P1]` | Ver a ficha: endereços | selo "Principal", "Loja de entrega" ou "Nenhuma loja entrega neste endereço", vazio, texto longo contido, nenhum botão | PASS (e2e `pdv-ficha-cliente-enderecos`); com ERP real: **não executado** |
+| J60.9 `[P1]` | Ver a ficha: endereços | selo "Principal", "Loja de entrega" ou "Loja de entrega ainda não definida", vazio, texto longo contido, nenhum botão | PASS (e2e `pdv-ficha-cliente-enderecos`); com ERP real: **não executado** |
 | J60.10 `[P1]` | Dois clientes do ERP no mesmo telefone/CPF; dois atendentes abrindo o mesmo cliente ao mesmo tempo | um só contato e um só vínculo; ambiguidade vira 409, nunca fusão silenciosa | PASS (UNIT `contato-espelho`, invariante `pdv-contato-espelho-unicidade` com duas sessões psql) |
 
 **NÃO COBERTO, declarado:** nenhum caso rodou contra o ERP real nem pelo túnel HTTPS (as seis specs de homologação
