@@ -1371,6 +1371,7 @@ jobs:
         pdv-instalar-modulo.spec.ts
         pdv-aba-lojas-lista.spec.ts
         pdv-aba-lojas-adicionar.spec.ts
+        pdv-aba-lojas-editar.spec.ts
 
       # ─── PARTE 6 — nasceu em 2026-09-28, e o orçamento de 24 min a pediu ───
       #
@@ -1577,6 +1578,8 @@ jobs:
       # os estados da mesma tela em `pdv-aba-lojas-lista`, com as rotas do PDV interceptadas.
       # `pdv-aba-lojas-adicionar-homologacao` (US-008): mesmo motivo, depende da homologação do ERP
       # por túnel. Os estados do modal ficam em `pdv-aba-lojas-adicionar`, com as rotas interceptadas.
+      # `pdv-aba-lojas-editar-homologacao` (US-009): mesmo motivo, depende da homologação do ERP por
+      # túnel. Os estados da edição ficam em `pdv-aba-lojas-editar`, com as rotas interceptadas.
       FORA_DO_CI: >-
         cadastro-sem-confirmacao-de-email.spec.ts
         aviso-de-caso-chega-no-whatsapp.spec.ts
@@ -1585,6 +1588,7 @@ jobs:
         cobranca-stripe-teste.spec.ts
         pdv-aba-lojas-lista-homologacao.spec.ts
         pdv-aba-lojas-adicionar-homologacao.spec.ts
+        pdv-aba-lojas-editar-homologacao.spec.ts
     steps:
       # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
       #

@@ -10,22 +10,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { nomeDoCanal } from "@/lib/channels/estado";
 import { ApiError } from "@/lib/api/types";
 
 import { AdicionarLojasDoErp } from "./_adicionar";
-
-type Loja = {
-  id: string;
-  erp_store_code: string;
-  sigla: string;
-  nome: string;
-  ativa: boolean;
-};
+import { type Conexao, type Loja, LinhaDeLoja } from "./_linha";
 
 function Conteudo() {
   const t = useT();
@@ -33,6 +26,17 @@ function Conteudo() {
   const lojas = useQuery({
     queryKey: ["pdv", "lojas"],
     queryFn: async () => (await apiClient.get<{ data: Loja[] }>("/api/v1/pdv/lojas")).data,
+    retry: false,
+  });
+
+  type ConexaoApi = { id: string; display_name: string | null; phone_number: string | null };
+  const conexoes = useQuery({
+    queryKey: ["pdv", "conexoes"],
+    queryFn: async (): Promise<Conexao[]> =>
+      (await apiClient.get<{ data: ConexaoApi[] }>("/api/v1/channel-sessions")).data.map((c) => ({
+        id: c.id,
+        rotulo: nomeDoCanal(c, t),
+      })),
     retry: false,
   });
 
@@ -102,18 +106,7 @@ function Conteudo() {
   return (
     <ul className="flex flex-col divide-y divide-border rounded-md border border-border" data-testid="lojas-lista">
       {lojas.data.map((loja) => (
-        <li
-          key={loja.id}
-          className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3"
-          data-testid={`loja-${loja.id}`}
-        >
-          <span className="w-16 font-mono text-sm font-semibold">{loja.sigla}</span>
-          <span className="min-w-0 flex-1 text-sm">{loja.nome}</span>
-          <span className="text-xs text-text-muted">
-            {t("Código do ERP")}: <span className="tabular-nums">{loja.erp_store_code}</span>
-          </span>
-          <Badge variant={loja.ativa ? "success" : "neutral"}>{loja.ativa ? t("Ativa") : t("Inativa")}</Badge>
-        </li>
+        <LinhaDeLoja key={loja.id} loja={loja} conexoes={conexoes.data ?? null} />
       ))}
     </ul>
   );

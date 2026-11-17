@@ -16268,6 +16268,11 @@ export const DICIONARIO: Traducoes = {
   "Todas as lojas do ERP já foram adicionadas.": { es: "Todas las tiendas del ERP ya fueron añadidas." },
   "Já adicionada": { es: "Ya añadida" },
   "Lojas adicionadas": { es: "Tiendas añadidas" },
+  "Sem conexão": { es: "Sin conexión" },
+  "Conexão removida": { es: "Conexión eliminada" },
+  "Loja atualizada": { es: "Tienda actualizada" },
+  "Loja ativa": { es: "Tienda activa" },
+  "Conexão de WhatsApp da loja": { es: "Conexión de WhatsApp de la tienda" },
   "O modelo de cobrança de cada caso e o calendário de parcelas.": {
     es: "El modelo de cobro de cada caso y el calendario de cuotas.",
   },
