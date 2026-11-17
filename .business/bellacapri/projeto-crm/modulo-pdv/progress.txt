@@ -155,3 +155,14 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - FK direta para `contacts` em tabela de módulo derruba a régua `lgpd-modulo-nao-declarado`: sem coluna de texto, a saída é ALLOWLIST com motivo >= 60 chars.
   - `pnpm test:db` leva ~13 min e `test:unit` ~6 min; comandos > 180s vão para background e a notificação chega depois.
 ---
+
+## 2026-11-17 - US-014
+- Implementado: `lib/pdv/contato-espelho.ts` com `vincularClienteDoErp(organizationId, cliente, {supabase?})` -> `{contactId, contatoCriado, vinculoNovo}` e `ContatoEspelhoError` (`contato_ambiguo` | `falha_ao_vincular`, mensagem fixa, `detalhes.motivo`). Fluxo: vínculo existente por `erp_customer_id` devolvido sem escrita; candidatos em `contacts` (org, `kind='person'`, não fundido) por `phoneLookupVariants`, `cpf_hash` (`hashCpf`) e `email_normalized`; >1 = `contato_ambiguo`; 0 = cria (telefone `canonicalPhoneBR`, CPF por `camposCpfParaGravar`, `source: "pdv"`; e-mail/telefone/data fora do formato do CHECK são omitidos); 23505 no INSERT do contato relê candidatos; 23505 no vínculo relê pelo id do ERP (corrida: devolve o da vencedora e apaga o contato órfão recém-criado) ou, se o contato é de outro cliente do ERP, `contato_ambiguo` (motivo `contato_de_outro_cliente`). Testes: `lib/pdv/contato-espelho.test.ts` (16 casos, banco em memória com as unicidades, incluindo `Promise.all` e ausência de dado pessoal em log/erro) e `tests/invariants/pdv-contato-espelho-unicidade.test.ts` (6 casos em Postgres real: unicidade de telefone/CPF/e-mail por org, vínculo único, e duas sessões psql simultâneas com 23505 na perdedora).
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings da base); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2847 passed`, `Tests 23 failed | 31111 passed`, mesmas 23 falhas/6 arquivos da base, sem linha Errors; `CONFERENCIA_KIT_RELEASE=v1.63.0 pnpm test:db` exit 0 (541 arquivos, 4293 passed); `pnpm test:db:update` exit 0. Sem schema novo; sem UI.
+- Não verificado: o serviço rodando contra Postgres/PostgREST real (o invariante prova as unicidades; o serviço é testado com banco falso); rota que o usa (US seguinte); `source: "pdv"` é escolha minha (a coluna é texto livre).
+- **Learnings:**
+  - `contacts.source` é texto livre sem CHECK; `kind='person'` filtra o placeholder de grupo.
+  - Com `noUncheckedIndexedAccess`, testes com banco falso indexado por string precisam de helper (`daTabela`/`primeira`); o typecheck inclui `tests/` e `lib/**/*.test.ts`.
+  - Invariante com concorrência real: duas `execFile` psql em paralelo, A segura `pg_sleep` dentro da transação, B entra depois e bloqueia na unicidade.
+  - O serviço usa o admin client: a defesa de tenant é o `.eq("organization_id")` em toda consulta (conferido no teste de isolamento).
+---
