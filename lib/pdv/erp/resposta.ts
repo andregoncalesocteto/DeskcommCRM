@@ -41,7 +41,7 @@ function textoDe(resultado: ResultadoDeFerramenta): string {
     .join("\n");
 }
 
-function erroDoTexto(texto: string): ErpPdvError {
+export function erroDoTexto(texto: string): ErpPdvError {
   let json: unknown;
   try {
     json = JSON.parse(texto);
