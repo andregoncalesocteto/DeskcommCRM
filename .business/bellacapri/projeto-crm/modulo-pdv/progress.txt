@@ -199,3 +199,11 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - `bg-surface-2` não existe no Tailwind do projeto; o token para fundo discreto é `bg-muted`.
   - Receita do e2e isolado funcionou como descrita; o 1o `pnpm e2e:build` falhou com o aviso do Next e o segundo passou.
 ---
+
+## 2026-11-17 - US-018
+- Implementado: fragmento `.changes/modulo-pdv-balcao-e-telefone.md` (`capacidade_nova`/`adicionado`, nota pública do módulo opcional desligado por padrão); `docs/features/modulo-pdv.md` (o que existe, ERP por tenant em `settings.mcp_externo` com chave cifrada e escrita só do admin da plataforma, HTTPS público/túnel, o que não existe, limites conhecidos, destino: módulo oficial opcional com núcleo mínimo, pela pergunta "se ninguém ativar, a operação comum continua inteira?" = sim); linha em `docs/index.md`; jornada J60 (10 casos, prioridades P0/P1) em `docs/testing/user-journey-map.md`, registrando que as specs `*-homologacao.spec.ts` foram escritas e NÃO executadas. Sem variável de ambiente nova.
+- Verificações: typecheck exit 0; lint exit 0 (0 erros, 629 warnings = base); `pnpm release:conferir` exit 0 (lista o fragmento novo); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2848 passed`, `Tests 23 failed | 31131 passed`, mesmas 23 falhas/6 arquivos da base, sem linha Errors. Sem schema/UI: sem test:db nem e2e.
+- Não verificado: os textos do fragmento e do doc contra um ERP real; `deskcomm-operacao` (mapa de telas) não foi atualizado e `conferir-mapa.sh` não foi rodado; a LP/changelog só lê depois do corte.
+- **Learnings:**
+  - `$TMPDIR` pode estar vazio no shell do agente: use o diretório scratchpad para logs.
+  - Doc novo em `docs/features/` não é cobrado por teste de índice; a linha em `docs/index.md` foi decisão de DoD 16.
