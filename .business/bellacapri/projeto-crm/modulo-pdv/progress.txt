@@ -58,3 +58,12 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Mensagens de rede podem citar o endereço: `ErpPdvError` de transporte leva só mensagem fixa e `{host}`.
   - Teste de `fetch` injetado: responder `initialize`, 202 a notificações, DELETE 200 e `tools/call` em JSON basta para o SDK.
 ---
+
+## 2026-11-16 - US-005
+- Implementado: `GET /api/v1/pdv/lojas` (`requireRole("agent")`, client de sessão + `.eq("organization_id", authz.org.orgId)`, filtro opcional `?ativa=true|false` validado por Zod) e `GET /api/v1/pdv/lojas/erp` (`manager`; `listarLojas(org)` + marca `ja_cadastrada` cruzando `pdv_stores.erp_store_code`). Helper `lib/pdv/api.ts`: `recusaSeModuloDesligado` (`moduloLigado(admin,"pdv")` → 404 `not_found`) e `respostaDoErroDoErp` (`erp_nao_configurado` 409; `tempo_esgotado` 504 e demais 502, ambos com código `erp_indisponivel` e `details.motivo`). Códigos novos em `lib/api/errors.ts`. Testes: `app/api/v1/pdv/lojas/route.test.ts` (15 casos: papéis, módulo desligado, ERP fora/não configurado, isolamento entre 2 tenants).
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings); `pnpm test:unit` exit 1, `Test Files 6 failed | 2844 passed`, `Tests 23 failed | 31042 passed`, mesmas 23 falhas/6 arquivos da linha de base, sem linha Errors. Sem schema: test:db não rodado. Sem UI: sem e2e.
+- Não verificado: rota contra Postgres/RLS reais (o teste usa banco falso que só filtra por `.eq`); a prova de RLS de `pdv_stores` é da US-001. 409 para `erp_nao_configurado` foi escolha minha (o critério só pede código estável).
+- **Learnings:**
+  - Portão de módulo em rota: `moduloLigado(createAdminClient(), "pdv")` DEPOIS do `requireRole` (404 não vaza existência a quem nem autenticou). Em rota de PDV nova, reutilize `lib/pdv/api.ts`.
+  - Rotas de GET não levam `requireSupportWrite(`; as mutantes (US seguintes) levam.
+  - O wrapper de sucesso de lista é `ok(array)`; sem `meta` quando não há paginação.
