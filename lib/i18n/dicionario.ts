@@ -16298,6 +16298,13 @@ export const DICIONARIO: Traducoes = {
   "clientes encontrados": { es: "clientes encontrados" },
   "mostrando os primeiros; refine a busca": { es: "mostrando los primeros; refine la búsqueda" },
   "Sem endereço cadastrado": { es: "Sin dirección registrada" },
+  "Nenhum cliente selecionado": { es: "Ningún cliente seleccionado" },
+  "Carregando a ficha do cliente": { es: "Cargando la ficha del cliente" },
+  "Cliente não encontrado no ERP. Busque de novo.": { es: "Cliente no encontrado en el ERP. Busque de nuevo." },
+  "Há mais de um contato com os dados deste cliente. Avise o gerente para resolver antes de continuar.": { es: "Hay más de un contacto con los datos de este cliente. Avise al gerente para resolverlo antes de continuar." },
+  "Não foi possível carregar a ficha do cliente.": { es: "No fue posible cargar la ficha del cliente." },
+  "Não informado": { es: "No informado" },
+  "Dados pessoais": { es: "Datos personales" },
   "O modelo de cobrança de cada caso e o calendário de parcelas.": {
     es: "El modelo de cobro de cada caso y el calendario de cuotas.",
   },
