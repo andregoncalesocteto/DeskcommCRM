@@ -1,7 +1,6 @@
 "use client";
 /**
- * Lista de lojas do tenant (módulo PDV). Só leitura nesta fatia: adicionar lojas do ERP é a
- * história seguinte.
+ * Lista de lojas do tenant (módulo PDV), com o botão que abre o modal "Adicionar lojas do ERP".
  *
  * Estados: carregando (esqueleto), erro (com "Tentar de novo"), vazio e ERP não configurado.
  * O último só se descobre quando a lista está vazia: a rota de lojas do tenant não fala com o
@@ -9,6 +8,7 @@
  * Módulo desligado não é estado desta tela: o layout devolve 404.
  */
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
+
+import { AdicionarLojasDoErp } from "./_adicionar";
 
 type Loja = {
   id: string;
@@ -25,7 +27,7 @@ type Loja = {
   ativa: boolean;
 };
 
-export function LojasDoTenant() {
+function Conteudo() {
   const t = useT();
 
   const lojas = useQuery({
@@ -114,5 +116,21 @@ export function LojasDoTenant() {
         </li>
       ))}
     </ul>
+  );
+}
+
+export function LojasDoTenant() {
+  const t = useT();
+  const [adicionando, setAdicionando] = useState(false);
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <Button className="h-11 lg:h-11" onClick={() => setAdicionando(true)} data-testid="adicionar-lojas">
+          {t("Adicionar lojas do ERP")}
+        </Button>
+      </div>
+      <Conteudo />
+      <AdicionarLojasDoErp open={adicionando} onOpenChange={setAdicionando} />
+    </div>
   );
 }

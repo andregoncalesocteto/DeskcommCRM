@@ -16261,6 +16261,13 @@ export const DICIONARIO: Traducoes = {
   "Este tenant ainda não tem lojas": { es: "Este tenant aún no tiene tiendas" },
   "Quando você adicionar lojas do ERP, elas aparecem aqui.": { es: "Cuando añadas tiendas del ERP, aparecerán aquí." },
   "Código do ERP": { es: "Código del ERP" },
+  "Adicionar lojas do ERP": { es: "Añadir tiendas del ERP" },
+  "Escolha as lojas que este tenant vai atender.": { es: "Elige las tiendas que este tenant va a atender." },
+  "Carregando as lojas do ERP": { es: "Cargando las tiendas del ERP" },
+  "Não foi possível buscar as lojas no ERP.": { es: "No fue posible buscar las tiendas en el ERP." },
+  "Todas as lojas do ERP já foram adicionadas.": { es: "Todas las tiendas del ERP ya fueron añadidas." },
+  "Já adicionada": { es: "Ya añadida" },
+  "Lojas adicionadas": { es: "Tiendas añadidas" },
   "O modelo de cobrança de cada caso e o calendário de parcelas.": {
     es: "El modelo de cobro de cada caso y el calendario de cuotas.",
   },
