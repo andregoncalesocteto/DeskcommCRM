@@ -67,3 +67,14 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Portão de módulo em rota: `moduloLigado(createAdminClient(), "pdv")` DEPOIS do `requireRole` (404 não vaza existência a quem nem autenticou). Em rota de PDV nova, reutilize `lib/pdv/api.ts`.
   - Rotas de GET não levam `requireSupportWrite(`; as mutantes (US seguintes) levam.
   - O wrapper de sucesso de lista é `ok(array)`; sem `meta` quando não há paginação.
+---
+
+## 2026-11-16 - US-006
+- Implementado: `POST /api/v1/pdv/lojas` (`manager`; corpo `{lojas:[{codigo,sigla}]}` 1..50; consulta `listarLojas` e só grava as que o ERP tem com aquele código+sigla, usando `nome`/código/sigla DO ERP; 422 `validation_failed` com `details.codigos_nao_encontrados` se faltar alguma; existente por sigla ou código = `ja_existiam` sem duplicar, 200 e sem auditoria; 201 quando criou; corrida 23505 tratada como existente; `Idempotency-Key` opcional via `comIdempotencia`, UUID inválido 400) e `PATCH /api/v1/pdv/lojas/[id]/route.ts` (`manager`, `.strict()` só `ativa` e `channel_session_id` nullable; conexão conferida com `.eq("organization_id")`, de outro tenant = 422; loja de outro tenant = 404). Ambos: `requireSupportWrite(` antes de tudo, portão do módulo, auditoria `pdv.store.updated` (nova em `lib/audit/actions.ts`). Testes: `app/api/v1/pdv/lojas/escrita.test.ts` (24 casos). Ajuste em `tests/unit/branding.test.ts`: o regex de host nu casava `pdv.store` de `"pdv.store.updated"` (store é TLD da lista); lookahead ganhou `\.[a-z]` + controles.
+- Verificações: typecheck exit 0; lint 0 erros (629 warnings); `pnpm test:unit` (rodada final, depois do último arquivo editado) exit 1, `Test Files 6 failed | 2845 passed`, `Tests 23 failed | 31061 passed`, mesmas 23 falhas/6 arquivos da linha de base, sem linha Errors; `suporte-cobertura-de-efeitos` verde. Sem schema: test:db não rodado. Sem UI: sem e2e.
+- Não verificado: rota contra Postgres/RLS reais (banco falso em memória; `comIdempotencia` mockado, o helper tem testes próprios); ERP real.
+- **Learnings:**
+  - Novo código de auditoria com 2 segmentos terminando em TLD da lista (`.store`, `.app`...) dispara a catraca de host de `branding.test.ts`; corrigido no regex, não na allowlist.
+  - Rota POST de lote: o efeito lança `RecusaDaAdicao(Response)` para o helper de idempotência não gravar recibo de recusa.
+  - Status 200 vs 201 entra no recibo (`status` do desfecho), então o replay mantém o status original.
+---
