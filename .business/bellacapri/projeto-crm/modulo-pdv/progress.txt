@@ -166,3 +166,13 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - Invariante com concorrência real: duas `execFile` psql em paralelo, A segura `pg_sleep` dentro da transação, B entra depois e bloqueia na unicidade.
   - O serviço usa o admin client: a defesa de tenant é o `.eq("organization_id")` em toda consulta (conferido no teste de isolamento).
 ---
+---
+
+## 2026-11-17 - US-015
+- Implementado: `GET /api/v1/pdv/clientes/{erp_id}` (`app/api/v1/pdv/clientes/[erp_id]/route.ts`): `requireRole("agent")`, portão do módulo, rate limit 60/min por usuário, Zod no id; `obterCliente(org, id, {camposSensiveis:true})`, depois `requireSupportWrite(` e `vincularClienteDoErp`. Devolve id, contact_id, nome, telefone, e-mail, cpf, data_nascimento (null quando ausente) e enderecos. `nao_encontrado` -> 404 `not_found`; `contato_ambiguo` -> 409; falha ao vincular -> 500; demais erros via `respostaDoErroDoErp`. Sem log e sem auditoria (CPF/nascimento só no corpo). 13 testes em `route.test.ts` (ficha completa, sem endereço, inexistente, ambíguo, isolamento, suporte readonly, papel, módulo, 429, id inválido, ausência em log).
+- Verificações: typecheck exit 0; lint 0 erros (eslint do diretório novo limpo); `pnpm test:unit` exit 1, `Test Files 6 failed | 2848 passed`, `Tests 23 failed | 31124 passed`, sem linha Errors: as mesmas 23 falhas/6 arquivos da linha de base. Sem schema/UI: test:db e e2e não rodados.
+- Decisão: a rota NÃO audita (GET; o PRD US-012 deixa `pdv.customer.viewed` como hipótese em aberto) e leva `requireSupportWrite(` porque o vínculo é escrita dentro de um GET. Não verificado: nenhum ERP real; isolamento entre tenants provado por unit (org da sessão), não contra banco (a defesa de tenant do espelho já tem invariante na US-014).
+- **Learnings:**
+  - `vi.mock(..., async (orig) => ...)` com `import()` de tipo gera warning de lint; use `import type * as x` + `orig<typeof x>()`.
+  - Params mockados de rota dinâmica não são URL-decodificados: teste de id vazio usa espaços literais.
+  - O lint total sobe de 629 para 630 se um warning novo escapar: conferir `npx eslint <dir novo>`.
