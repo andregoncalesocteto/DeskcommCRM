@@ -4115,8 +4115,10 @@ fresca roda a provisionadora `fn_pdv_provisionar()`, provada em `tests/invariant
 
 Specs: `tests/e2e/pdv-*.spec.ts` (parte 5 do CI), todas com `/api/v1/pdv/**` **interceptado** (o ERP não existe na
 stack de teste). As `tests/e2e/pdv-*-homologacao.spec.ts` (lojas: lista, adicionar, editar; identificar cliente;
-ficha: dados e endereços) foram **escritas mas NÃO executadas**: dependem da homologação do ERP por túnel HTTPS,
-estão em `FORA_DO_CI` e pulam sem `PDV_HOMOLOGACAO=1`. Evidência dos estados com rota interceptada, medida por
+ficha: dados e endereços) foram **executadas em 2026-11-17** contra o ERP real (pelo túnel HTTPS, só leitura), numa
+stack isolada, e as seis passaram; ficam em `FORA_DO_CI` e pulam sem `PDV_HOMOLOGACAO=1`. As de lojas têm evidência em
+`evidence/modulo-pdv/us-00{7,8,9}-homologacao.png`; as de cliente e ficha **não têm screenshot versionado**, porque
+mostram dados de uma pessoa real. Evidência dos estados com rota interceptada, medida por
 `getBoundingClientRect` (alvos >= 44 px): `evidence/modulo-pdv/`.
 
 | # | Caso | Expectativa | Resultado |
@@ -4133,5 +4135,6 @@ estão em `FORA_DO_CI` e pulam sem `PDV_HOMOLOGACAO=1`. Evidência dos estados c
 | J60.10 `[P1]` | Dois clientes do ERP no mesmo telefone/CPF; dois atendentes abrindo o mesmo cliente ao mesmo tempo | um só contato e um só vínculo; ambiguidade vira 409, nunca fusão silenciosa | PASS (UNIT `contato-espelho`, invariante `pdv-contato-espelho-unicidade` com duas sessões psql) |
 
 **NÃO COBERTO, declarado:** o dono conferiu as telas à mão contra o ERP real, pelo túnel HTTPS, nos 3 tenants em
-2026-11-17 (relato dele, sem registro de quais casos), mas as seis specs de homologação seguem escritas e nunca executadas; papel `viewer` no browser; 404 de módulo desligado na tela; limite de taxa da
+2026-11-17 (relato dele, sem registro de quais casos); as seis specs de homologação passaram contra o ERP real, mas provam só as
+asserções delas (lista com pelo menos um item, ficha aberta, CPF mascarado), não que os dados batem com o ERP; papel `viewer` no browser; 404 de módulo desligado na tela; limite de taxa da
 busca com Redis real; edição de endereço, cadastro de cliente e pedido (não existem).

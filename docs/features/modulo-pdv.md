@@ -57,11 +57,12 @@ de núcleo e fica como plano B.
 
 ## Limites conhecidos
 
-- **Prova contra o ERP real só à mão.** As histórias foram entregues sobre fixtures e
+- **Prova contra o ERP real: specs e conferência manual.** As histórias foram entregues sobre fixtures e
   interceptação de rota; em 2026-11-17 o dono conferiu as telas contra o ERP real, pelo túnel
-  HTTPS, nos 3 tenants (relato, sem spec nem registro por caso). As specs `tests/e2e/pdv-*-homologacao.spec.ts` foram **escritas
-  mas não executadas**: dependem da homologação do ERP por túnel, ficam em `FORA_DO_CI` e
-  pulam sem `PDV_HOMOLOGACAO=1`. Evidência visual dos estados (com rota interceptada) em
+  HTTPS, nos 3 tenants (relato, sem spec nem registro por caso). As seis specs `tests/e2e/pdv-*-homologacao.spec.ts` foram
+  **executadas em 2026-11-17** contra o ERP real e passaram; ficam em `FORA_DO_CI` e pulam sem
+  `PDV_HOMOLOGACAO=1`. Só as de lojas têm screenshot versionado: os de cliente e ficha mostrariam
+  uma pessoa real. Elas provam as asserções que têm, não que os dados batem com o ERP. Evidência visual dos estados (com rota interceptada) em
   `evidence/modulo-pdv/`.
 - **Status HTTP do ERP** são escolhas desta entrega, não do contrato: `erp_nao_configurado`
   = 409, ERP fora do ar = 502 e tempo esgotado = 504 (ambos com código `erp_indisponivel`),

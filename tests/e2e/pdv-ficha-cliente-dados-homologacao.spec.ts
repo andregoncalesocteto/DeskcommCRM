@@ -3,8 +3,8 @@
  *
  * FORA DO CI (`FORA_DO_CI` do e2e.yml): depende da homologação do ERP por túnel. Precisa de um
  * servidor MCP do ERP de homologação cadastrado na organização do e2e e do módulo `pdv` instalado.
- * Sem `PDV_HOMOLOGACAO=1` ela se pula, em vez de reprovar. NUNCA foi executada: os seletores vêm da
- * spec interceptada.
+ * Sem `PDV_HOMOLOGACAO=1` ela se pula, em vez de reprovar. Executada em 2026-11-17 contra o ERP
+ * real (passou). O screenshot grava uma pessoa real: NÃO o versione.
  *
  * Receita, depois que a homologação existir:
  *   PDV_HOMOLOGACAO=1 PDV_HOMOLOGACAO_NOME=<parte do nome de um cliente da homologação> \
