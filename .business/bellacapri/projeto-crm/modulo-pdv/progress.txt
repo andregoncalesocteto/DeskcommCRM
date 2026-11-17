@@ -188,3 +188,14 @@ Feature: modulo-pdv-fases-1-e-2 (.business/bellacapri/projeto-crm/modulo-pdv/prd
   - `mascaraCpf` (lib/lgpd/mask.ts) é função pura, importável em componente cliente.
   - O corpo da ficha traz `enderecos`; a US-017 pode reutilizar a mesma query (`["pdv","cliente",id]`).
 ---
+
+## 2026-11-17 - US-017
+- Implementado: bloco "Endereços (N)" em `app/app/pdv/clientes/_ficha.tsx`, abaixo de "Dados pessoais", reutilizando o corpo de `GET /api/v1/pdv/clientes/{id}` (sem rota nova). Um card por endereço: selo "Principal", endereço, complemento (omitido se nulo), "bairro, cidade/UF", "CEP 13060-000" (formata 8 dígitos), "Loja de entrega: <sigla>" ou "Nenhuma loja entrega neste endereço" (`text-danger`); vazio: "Este cliente ainda não tem endereço"; `break-words`/`min-w-0` contra texto longo. Nenhum botão. 6 textos novos no dicionário es.
+- Specs: `tests/e2e/pdv-ficha-cliente-enderecos.spec.ts` (em `SPECS_PARTE_5`, `/api/v1/pdv/*` interceptado) e `pdv-ficha-cliente-enderecos-homologacao.spec.ts` (em `FORA_DO_CI`, motivo 'depende da homologação do ERP por túnel'; pula sem `PDV_HOMOLOGACAO=1`). Evidência: `evidence/modulo-pdv/US-017.md` + 2 PNGs.
+- Verificações: typecheck exit 0; `pnpm lint` exit 0 (0 erros, 629 warnings = base); e2e dos estados `1 passed (7.9s)` na stack isolada (3100, build de produção) depois da última edição de código/spec (ordem dos blocos, endereço/complemento longos dentro do card e sem rolagem horizontal, zero botões); `pnpm test:unit` final exit 1, `Test Files 6 failed | 2848 passed`, `Tests 23 failed | 31130 passed`, mesmas 23 falhas/6 arquivos da base, sem linha Errors. Sem schema: test:db não rodado. Stack e worktree isolados removidos.
+- NÃO executado: `pdv-ficha-cliente-enderecos-homologacao.spec.ts` (depende da homologação do ERP; humano, depois, com `us-017-homologacao.png`; seus seletores nunca rodaram). Não verificado: endereços do ERP real; alvo de 44 px (a US não tem alvo clicável novo); papel `viewer` no browser.
+- **Learnings:**
+  - A história de "metade 2" da ficha foi só um bloco no mesmo componente: a query `["pdv","cliente",id]` já trazia `enderecos`, então não há segunda chamada.
+  - `bg-surface-2` não existe no Tailwind do projeto; o token para fundo discreto é `bg-muted`.
+  - Receita do e2e isolado funcionou como descrita; o 1o `pnpm e2e:build` falhou com o aviso do Next e o segundo passou.
+---
