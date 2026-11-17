@@ -21,6 +21,8 @@ export function respostaDoErroDoErp(err: unknown, requestId: string): NextRespon
     return fail("internal_error", "Erro interno.", 500, { requestId });
   }
   switch (err.codigo) {
+    case "termo_invalido":
+      return fail("validation_failed", err.message, 422, { requestId });
     case "erp_nao_configurado":
       return fail("erp_nao_configurado", err.message, 409, { requestId });
     case "tempo_esgotado":
