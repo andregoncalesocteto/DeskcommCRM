@@ -1372,6 +1372,7 @@ jobs:
         pdv-aba-lojas-lista.spec.ts
         pdv-aba-lojas-adicionar.spec.ts
         pdv-aba-lojas-editar.spec.ts
+        pdv-identificar-cliente.spec.ts
 
       # ─── PARTE 6 — nasceu em 2026-09-28, e o orçamento de 24 min a pediu ───
       #
@@ -1580,6 +1581,8 @@ jobs:
       # por túnel. Os estados do modal ficam em `pdv-aba-lojas-adicionar`, com as rotas interceptadas.
       # `pdv-aba-lojas-editar-homologacao` (US-009): mesmo motivo, depende da homologação do ERP por
       # túnel. Os estados da edição ficam em `pdv-aba-lojas-editar`, com as rotas interceptadas.
+      # `pdv-identificar-cliente-homologacao` (US-011): mesmo motivo, depende da homologação do ERP
+      # por túnel. Os estados da busca ficam em `pdv-identificar-cliente`, com a rota interceptada.
       FORA_DO_CI: >-
         cadastro-sem-confirmacao-de-email.spec.ts
         aviso-de-caso-chega-no-whatsapp.spec.ts
@@ -1589,6 +1592,7 @@ jobs:
         pdv-aba-lojas-lista-homologacao.spec.ts
         pdv-aba-lojas-adicionar-homologacao.spec.ts
         pdv-aba-lojas-editar-homologacao.spec.ts
+        pdv-identificar-cliente-homologacao.spec.ts
     steps:
       # ── O RELÓGIO DESTA PARTE: ONDE O TETO DE 30 MIN COMEÇA A CONTAR ──────
       #

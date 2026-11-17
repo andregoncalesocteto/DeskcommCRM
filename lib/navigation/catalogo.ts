@@ -471,6 +471,21 @@ export const NAV_CATALOG = [
     modulo: "pdv",
   },
   {
+    // A primeira tela do balcão do PDV: achar o cliente (no ERP) por telefone, nome ou CPF antes
+    // de montar o pedido. Uso diário de quem está no atendimento, então fica em CRM e não em
+    // Configurações. FORA do sidebar pelo mesmo motivo de Comandas (grupo CRM já tem hub: a tela
+    // mora em CRM › Ver tudo em CRM). Só existe com o módulo `pdv` instalado; a tela e a rota
+    // recusam (404) sem ele.
+    href: "/app/pdv/clientes",
+    label: "Identificar cliente",
+    description: "Busque o cliente por telefone, nome ou CPF antes de montar o pedido.",
+    icon: "UserCircle",
+    group: "crm",
+    section: "O dia a dia da venda",
+    minRole: "agent",
+    modulo: "pdv",
+  },
+  {
     // O BALCÃO. Fica em CRM, e não em Configurações, porque é uso diário de quem
     // está com a cliente na frente — a tela irmã, em Configurações › Financeiro,
     // é onde o negócio se descreve uma vez.

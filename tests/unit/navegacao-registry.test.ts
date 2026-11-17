@@ -187,6 +187,9 @@ describe("hubSections", () => {
       // menu do dia a dia com os 20 itens de sempre; a porta é o hub e o ⌘K.
       "/app/tasks/planos",
       "/app/calls",
+      // Módulo `pdv` (US-011): a primeira tela do balcão cai em "O dia a dia da venda", fora do
+      // sidebar. `hubSections("crm", true, null)` ignora `modulo`, então a porta entra aqui.
+      "/app/pdv/clientes",
       "/app/comandas",
       "/app/products",
       "/app/imports",
