@@ -1,5 +1,12 @@
 # Casos de uso — Histórico e recompra no PDV
 
+> **Rascunho anterior ao protótipo (2026-11-18).** O protótipo `cart-craft-counter` é a especificação do produto
+> ([especificacao-prototipo.md](../prototipo/especificacao-prototipo.md)); onde este documento difere dela, vale a
+> especificação. Este rascunho segue útil só para o que o protótipo não tem por ser local: integração com o ERP (envio,
+> recusa, reenvio) e validação das ações do assistente.
+
+> **Fora do protótipo:** o protótipo não tem histórico por cliente nem "Repetir último pedido" (só "Pedidos do dia", global). Fica em backlog até o dono do projeto decidir.
+
 Escopo: ver os pedidos anteriores do cliente na ficha e repetir o último pedido. Fora deste documento: montar o pedido
 novo (ver "Fazer o pedido"), cadastro, assistente. Os dados vêm do ERP por MCP (hoje, por um mock, ADR-009).
 

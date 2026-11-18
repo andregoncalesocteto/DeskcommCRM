@@ -1,5 +1,10 @@
 # Casos de uso — Fazer o pedido no PDV
 
+> **Rascunho anterior ao protótipo (2026-11-18).** O protótipo `cart-craft-counter` é a especificação do produto
+> ([especificacao-prototipo.md](../prototipo/especificacao-prototipo.md)); onde este documento difere dela, vale a
+> especificação. Este rascunho segue útil só para o que o protótipo não tem por ser local: integração com o ERP (envio,
+> recusa, reenvio) e validação das ações do assistente.
+
 Escopo: do carrinho ao pedido aceito pelo ERP: configurar a pizza, revisar o carrinho, definir tipo, loja e
 endereço, confirmar, enviar e acompanhar o resultado. Fora deste documento: identificar cliente e consultar
 produto (já escritos), histórico e recompra, assistente, cadastro de cliente, cobrança e link de pagamento.

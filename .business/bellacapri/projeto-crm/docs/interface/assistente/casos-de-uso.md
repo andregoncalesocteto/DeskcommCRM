@@ -1,5 +1,12 @@
 # Casos de uso — Assistente do atendente
 
+> **Rascunho anterior ao protótipo (2026-11-18).** O protótipo `cart-craft-counter` é a especificação do produto
+> ([especificacao-prototipo.md](../prototipo/especificacao-prototipo.md)); onde este documento difere dela, vale a
+> especificação. Este rascunho segue útil só para o que o protótipo não tem por ser local: integração com o ERP (envio,
+> recusa, reenvio) e validação das ações do assistente.
+
+> **Fora do protótipo:** UC03 (painel de uso e custo), desfazer e teto de orçamento não existem no protótipo. O assistente do protótipo é um parser de frases simulado, sem validação contra o ERP.
+
 Escopo: o atendente descreve o pedido em linguagem natural, por texto ou voz, e o assistente **propõe** ações que o
 servidor valida e aplica ao pedido. Regras do PRD e do ADR-005: o assistente nunca confirma o pedido, nunca envia ao ERP
 e nunca grava por conta própria; CPF, telefone e e-mail do cliente não vão ao modelo. Fora deste documento: as telas
