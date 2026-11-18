@@ -91,7 +91,7 @@ function como(orgId: string | null) {
 beforeEach(() => {
   vi.mocked(moduloLigado).mockResolvedValue(true);
   vi.mocked(obterCliente).mockReset().mockResolvedValue(CLIENTE);
-  vi.mocked(consultarVinculo).mockReset().mockResolvedValue({ estado: "livre" });
+  vi.mocked(consultarVinculo).mockReset().mockResolvedValue({ estado: "livre", contato: null });
   vi.mocked(vincularClienteDoErp).mockReset();
   vi.mocked(atualizarContatoDoErp).mockReset();
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
@@ -108,7 +108,7 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
     const { data } = await res.json();
     expect(data).toMatchObject({
       id: "c-1",
-      vinculo: { estado: "livre" },
+      vinculo: { estado: "livre", contato: null },
       nome: "Maria da Silva",
       telefone: "+5519998765432",
       email: "maria@exemplo.com",
@@ -132,19 +132,21 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
       estado: "vinculado",
       contactId: "ct-1",
       contatoNome: "Maria da Silva",
+      outrasFichas: 1,
     });
     expect((await (await chamar()).json()).data.vinculo).toEqual({
       estado: "vinculado",
       contact_id: "ct-1",
       contato_nome: "Maria da Silva",
+      outras_fichas: 1,
     });
     vi.mocked(consultarVinculo).mockResolvedValueOnce({
-      estado: "telefone_de_outro",
-      contatoNome: "Outra Maria",
+      estado: "livre",
+      contato: { nome: "Dona do número", fichas: 2 },
     });
     expect((await (await chamar()).json()).data.vinculo).toEqual({
-      estado: "telefone_de_outro",
-      contato_nome: "Outra Maria",
+      estado: "livre",
+      contato: { nome: "Dona do número", fichas: 2 },
     });
     for (const estado of ["telefone_ausente", "ambiguo"] as const) {
       vi.mocked(consultarVinculo).mockResolvedValueOnce({ estado });

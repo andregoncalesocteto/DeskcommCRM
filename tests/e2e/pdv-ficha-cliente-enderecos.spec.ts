@@ -26,7 +26,7 @@ const LONGO =
 const FICHAS: Record<string, unknown> = {
   c1: {
     id: "c1",
-    vinculo: { estado: "livre" },
+    vinculo: { estado: "livre", contato: null },
     nome: "Maria Oliveira",
     telefone: "(19) 99876-5432",
     email: null,
@@ -70,7 +70,7 @@ const FICHAS: Record<string, unknown> = {
   },
   c2: {
     id: "c2",
-    vinculo: { estado: "livre" },
+    vinculo: { estado: "livre", contato: null },
     nome: "Maria Sem Endereco",
     telefone: null,
     email: null,

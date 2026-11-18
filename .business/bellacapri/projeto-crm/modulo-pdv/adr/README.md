@@ -12,7 +12,8 @@ Origem: [design-modulo-pdv.md](../design-modulo-pdv.md), seção 10. O arquivo `
 | [ADR-004](ADR-004-transporte-do-erp.md) | Camada única para o ERP, começando por MCP | Proposto, condicionado à prova 0.4 |
 | [ADR-005](ADR-005-assistente-propoe-servidor-valida.md) | Assistente propõe ações, o servidor valida e aplica | **Aceito** (2026-11-16) |
 | [ADR-006](ADR-006-envio-do-pedido-ao-erp-pelo-event-log.md) | Envio do pedido ao ERP por handler do `event_log` | **Aceito** (2026-11-16) |
-| [ADR-007](ADR-007-vinculo-do-contato-por-acao-do-atendente.md) | Vínculo cliente do ERP e contato do CRM por botão, pelo telefone | **Aceito** (2026-11-18) |
+| [ADR-007](ADR-007-vinculo-do-contato-por-acao-do-atendente.md) | Vínculo cliente do ERP e contato do CRM por botão, pelo telefone | **Aceito** (2026-11-18); a recusa do telefone de outro cliente foi alterada pelo ADR-008 |
+| [ADR-008](ADR-008-um-contato-varias-fichas-do-erp.md) | Um contato com várias fichas do ERP; o atendente escolhe se sobrescreve | **Aceito** (2026-11-18) |
 
 **Estados:** Proposto, Aceito, Rejeitado, Substituído por ADR-NNN.
 

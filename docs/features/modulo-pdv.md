@@ -14,7 +14,7 @@ código**, não o que foi planejado.
 | Slug `pdv` no catálogo de módulos de tabela; sem chave em `platform_config`, desligado enquanto não houver `modulos_instalados.estado = 'ativo'` | `lib/instalacao/modulos.ts`, `lib/modulos/catalogo.ts` |
 | Provisionadora `public.fn_pdv_provisionar()` (instalar o módulo cria as tabelas; RLS por `fn_user_org_ids()`) | `supabase/migrations/*_9044_*`, `*_9045_*` e apêndice do `supabase/baseline.sql` |
 | `pdv_stores` (loja do ERP: código, sigla, nome, ativa, conexão de WhatsApp opcional) | provisionadora |
-| `pdv_customer_links` (só ids opacos: contato do CRM, id do cliente no ERP, data do vínculo) | provisionadora |
+| `pdv_customer_links` (só ids opacos: contato do CRM, id do cliente no ERP, data do vínculo; um contato pode ter várias fichas do ERP, ADR-008) | provisionadora |
 | Cliente do ERP: `listarLojas`, `buscarCliente`, `obterCliente`, leitura validada por Zod | `lib/pdv/erp/` |
 | Contato espelho: acha ou cria o contato do CRM para um cliente do ERP, sem duplicar sob concorrência | `lib/pdv/contato-espelho.ts` |
 | API: `GET/POST /api/v1/pdv/lojas`, `PATCH /api/v1/pdv/lojas/{id}`, `GET /api/v1/pdv/lojas/erp`, `GET /api/v1/pdv/clientes`, `GET /api/v1/pdv/clientes/{erp_id}` | `app/api/v1/pdv/` |
@@ -66,7 +66,7 @@ de núcleo e fica como plano B.
   `evidence/modulo-pdv/`.
 - **Status HTTP do ERP** são escolhas desta entrega, não do contrato: `erp_nao_configurado`
   = 409, ERP fora do ar = 502 e tempo esgotado = 504 (ambos com código `erp_indisponivel`),
-  `termo_invalido` = 422, cliente inexistente = 404. Nas ações de vínculo: contato ambíguo, telefone de outro cliente e sem vínculo = 409, cliente sem telefone = 422.
+  `termo_invalido` = 422, cliente inexistente = 404. Nas ações de vínculo: contato ambíguo e sem vínculo = 409, cliente sem telefone = 422.
 - **Sem auditoria de visualização da ficha.** `GET /pdv/clientes/{id}` não grava
   `api_audit_log`; `pdv.customer.viewed` segue como hipótese em aberto. A ficha é
   leitura pura (ADR-007); o vínculo é feito pelas rotas `POST` e `PATCH` de

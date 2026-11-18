@@ -2,7 +2,8 @@
 /**
  * Ficha do cliente do PDV: blocos "Vínculo com o CRM", "Dados pessoais" e "Endereços (N)" de
  * `GET /api/v1/pdv/clientes/{id}`. Abrir a ficha só LÊ; o atendente liga o cliente ao contato do CRM
- * (pelo telefone) com "Vincular ao CRM" e puxa os dados do ERP com "Atualizar dados" (ADR-007).
+ * (pelo telefone) com "Vincular" ou "Atualizar e vincular" (o ERP sobrescreve o contato) e puxa os
+ * dados do ERP com "Atualizar dados" (ADR-007). Um contato pode ter várias fichas (ADR-008).
  *
  * LGPD: CPF e data de nascimento vivem só no estado do react-query desta tela (`gcTime: 0`). Nunca
  * vão para URL, storage nem log; o CPF é exibido mascarado (`mascaraCpf`, quatro últimos dígitos).
@@ -10,6 +11,7 @@
  * (edição de endereço depende da fatia E2 do ERP).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -32,9 +34,9 @@ type Endereco = {
 };
 
 type Vinculo =
-  | { estado: "vinculado"; contact_id: string; contato_nome: string }
-  | { estado: "telefone_de_outro"; contato_nome: string }
-  | { estado: "livre" | "telefone_ausente" | "ambiguo" };
+  | { estado: "vinculado"; contact_id: string; contato_nome: string; outras_fichas: number }
+  | { estado: "livre"; contato: { nome: string; fichas: number } | null }
+  | { estado: "telefone_ausente" | "ambiguo" };
 
 type Ficha = {
   id: string;
@@ -67,18 +69,19 @@ function mensagemDoErro(erro: unknown, t: (k: string) => string): string {
       "Há mais de um contato com este telefone. Peça ao gerente que una os contatos antes de continuar.",
     );
   }
-  if (codigo === "telefone_de_outro_cliente") {
-    return t("Este telefone já está vinculado a outro cliente do ERP.");
-  }
   if (codigo === "cliente_sem_telefone") return t("Este cliente não tem telefone no ERP.");
   return t("Não foi possível concluir. Tente de novo.");
 }
 
+type RespostaDoVinculo = { data: { sem_cpf_email: boolean } };
+
 function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo }) {
   const t = useT();
   const qc = useQueryClient();
+  const [confirmando, setConfirmando] = useState(false);
   const rota = `/api/v1/pdv/clientes/${encodeURIComponent(erpId)}/vinculo`;
-  const depois = async (r: { data: { sem_cpf_email: boolean } }, ok: string) => {
+  const depois = async (r: RespostaDoVinculo, ok: string) => {
+    setConfirmando(false);
     await qc.invalidateQueries({ queryKey: ["pdv", "cliente", erpId] });
     toast.success(ok);
     if (r.data.sem_cpf_email) {
@@ -86,21 +89,26 @@ function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo })
     }
   };
   const vincular = useMutation({
-    mutationFn: () => apiClient.post<{ data: { sem_cpf_email: boolean } }>(rota, {}),
-    onSuccess: (r) => depois(r, t("Cliente vinculado ao CRM")),
+    mutationFn: (sobrescrever: boolean) =>
+      apiClient.post<RespostaDoVinculo>(rota, sobrescrever ? { sobrescrever: true } : {}),
+    onSuccess: (r, sobrescrever) =>
+      depois(r, sobrescrever ? t("Dados atualizados e cliente vinculado") : t("Cliente vinculado ao CRM")),
   });
   const atualizar = useMutation({
-    mutationFn: () => apiClient.patch<{ data: { sem_cpf_email: boolean } }>(rota, {}),
+    mutationFn: () => apiClient.patch<RespostaDoVinculo>(rota, {}),
     onSuccess: (r) => depois(r, t("Dados do contato atualizados")),
   });
   const erro = vincular.error ?? atualizar.error;
   const ocupado = vincular.isPending || atualizar.isPending;
 
   let texto: string;
-  let acao: React.ReactNode = null;
+  let acoes: React.ReactNode = null;
   if (vinculo.estado === "vinculado") {
     texto = `${t("Vinculado ao contato")}: ${vinculo.contato_nome}`;
-    acao = (
+    if (vinculo.outras_fichas > 0) {
+      texto += `. ${t("Este contato também está ligado a outras fichas do ERP")}: ${vinculo.outras_fichas}`;
+    }
+    acoes = (
       <Button
         variant="outline"
         className="h-11 lg:h-11"
@@ -112,19 +120,69 @@ function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo })
       </Button>
     );
   } else if (vinculo.estado === "livre") {
-    texto = t("Este cliente ainda não está no CRM.");
-    acao = (
-      <Button
-        className="h-11 lg:h-11"
-        disabled={ocupado}
-        data-testid="vinculo-vincular"
-        onClick={() => vincular.mutate()}
-      >
-        {t("Vincular ao CRM")}
-      </Button>
-    );
-  } else if (vinculo.estado === "telefone_de_outro") {
-    texto = `${t("Este telefone já está vinculado a outro cliente do ERP")}: ${vinculo.contato_nome}`;
+    const contato = vinculo.contato;
+    if (contato === null) {
+      texto = t("Este cliente ainda não está no CRM.");
+      acoes = (
+        <Button
+          className="h-11 lg:h-11"
+          disabled={ocupado}
+          data-testid="vinculo-vincular"
+          onClick={() => vincular.mutate(false)}
+        >
+          {t("Vincular")}
+        </Button>
+      );
+    } else if (confirmando) {
+      texto = `${t("O contato")} "${contato.nome}" ${t("será sobrescrito com os dados desta ficha.")}`;
+      acoes = (
+        <>
+          <Button
+            className="h-11 lg:h-11"
+            disabled={ocupado}
+            data-testid="vinculo-confirmar"
+            onClick={() => vincular.mutate(true)}
+          >
+            {t("Confirmar")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11 lg:h-11"
+            disabled={ocupado}
+            data-testid="vinculo-cancelar"
+            onClick={() => setConfirmando(false)}
+          >
+            {t("Cancelar")}
+          </Button>
+        </>
+      );
+    } else {
+      texto = `${t("Já existe um contato com este telefone")}: ${contato.nome}`;
+      if (contato.fichas > 0) {
+        texto += `. ${t("Ele já está ligado a outras fichas do ERP")}: ${contato.fichas}`;
+      }
+      acoes = (
+        <>
+          <Button
+            className="h-11 lg:h-11"
+            disabled={ocupado}
+            data-testid="vinculo-vincular"
+            onClick={() => vincular.mutate(false)}
+          >
+            {t("Vincular")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11 lg:h-11"
+            disabled={ocupado}
+            data-testid="vinculo-atualizar-e-vincular"
+            onClick={() => setConfirmando(true)}
+          >
+            {t("Atualizar e vincular")}
+          </Button>
+        </>
+      );
+    }
   } else if (vinculo.estado === "telefone_ausente") {
     texto = t("Este cliente não tem telefone no ERP. Sem telefone não há como vincular ao CRM.");
   } else {
@@ -132,7 +190,7 @@ function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo })
       "Há mais de um contato com este telefone. Peça ao gerente que una os contatos antes de continuar.",
     );
   }
-  const bloqueado = vinculo.estado !== "vinculado" && vinculo.estado !== "livre";
+  const bloqueado = vinculo.estado === "telefone_ausente" || vinculo.estado === "ambiguo";
 
   return (
     <section
@@ -148,7 +206,7 @@ function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo })
       >
         {texto}
       </p>
-      {acao ? <div className="flex">{acao}</div> : null}
+      {acoes ? <div className="flex flex-wrap gap-2">{acoes}</div> : null}
       {erro ? (
         <p className="text-danger text-sm" role="alert" data-testid="vinculo-erro">
           {mensagemDoErro(erro, t)}

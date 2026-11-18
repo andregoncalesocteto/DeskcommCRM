@@ -2,9 +2,10 @@
 // para conversas, funil e LGPD, ligado ao id do ERP por `pdv_customer_links`.
 //
 // O TELEFONE é a única chave entre as duas pontas (ADR-007). Abrir a ficha só LÊ
-// (`consultarVinculo`); quem escreve é o atendente, pelos botões "Vincular ao CRM"
+// (`consultarVinculo`); quem escreve é o atendente, pelos botões "Vincular" e "Atualizar e vincular"
 // (`vincularClienteDoErp`) e "Atualizar dados" (`atualizarContatoDoErp`). CPF e e-mail são dados
-// do contato, nunca critério de busca do contato.
+// do contato, nunca critério de busca do contato. Um contato pode ter VÁRIAS fichas do ERP
+// (ADR-008): o ERP duplica a mesma pessoa, e cada ficha tem a própria linha de vínculo.
 //
 // `organizationId` vem do chamador autenticado, NUNCA do cliente do ERP. Esta camada usa o admin
 // client (ignora RLS), então toda consulta repete `organization_id`. Dado pessoal (CPF, telefone,
@@ -19,7 +20,6 @@ import type { Cliente } from "./erp/tipos";
 
 export type CodigoContatoEspelho =
   | "contato_ambiguo"
-  | "telefone_de_outro_cliente"
   | "cliente_sem_telefone"
   | "sem_vinculo"
   | "falha_ao_vincular";
@@ -38,11 +38,13 @@ export class ContatoEspelhoError extends Error {
 
 /** Situação do vínculo de um cliente do ERP com o CRM, lida sem escrever nada. */
 export type EstadoDoVinculo =
-  | { estado: "vinculado"; contactId: string; contatoNome: string }
-  /** Pode vincular: há um contato livre com este telefone, ou o botão criará um. */
-  | { estado: "livre" }
-  /** O contato com este telefone já pertence a OUTRO cliente do ERP (telefone repetido no ERP). */
-  | { estado: "telefone_de_outro"; contatoNome: string }
+  /** `outrasFichas`: quantas OUTRAS fichas do ERP apontam para o mesmo contato. */
+  | { estado: "vinculado"; contactId: string; contatoNome: string; outrasFichas: number }
+  /**
+   * Pode vincular. `contato` é o contato que já tem este telefone (e a quantas fichas do ERP ele
+   * está ligado), ou null quando o botão criará um.
+   */
+  | { estado: "livre"; contato: { nome: string; fichas: number } | null }
   | { estado: "telefone_ausente" }
   /** Mais de um contato vivo para o mesmo número (grafias com e sem o nono dígito). */
   | { estado: "ambiguo" };
@@ -55,6 +57,13 @@ export interface ResultadoDoVinculo {
   vinculoNovo: boolean;
   /** CPF e e-mail não foram copiados porque pertencem a outro contato (a chave é o telefone). */
   semCpfEmail: boolean;
+  /** Os dados do ERP sobrescreveram o contato (botão "Atualizar e vincular"). */
+  dadosAtualizados: boolean;
+}
+
+export interface OpcoesDoVinculo extends OpcoesDoEspelho {
+  /** "Atualizar e vincular": além de ligar, o ERP sobrescreve os dados do contato do telefone. */
+  sobrescrever?: boolean;
 }
 
 export interface ResultadoDaAtualizacao {
@@ -81,11 +90,6 @@ const AMBIGUO = (motivo: string) =>
     "contato_ambiguo",
     "Há mais de um contato com este telefone. Peça ao gerente que una os contatos antes de continuar.",
     { motivo },
-  );
-const TELEFONE_DE_OUTRO = () =>
-  new ContatoEspelhoError(
-    "telefone_de_outro_cliente",
-    "O contato com este telefone já está vinculado a outro cliente do ERP.",
   );
 const SEM_TELEFONE = () =>
   new ContatoEspelhoError(
@@ -142,19 +146,19 @@ async function vinculoDoErp(
   return (data as { contact_id: string } | null)?.contact_id ?? null;
 }
 
-async function contatoLigadoAOutro(
+/** Quantas fichas do ERP apontam para este contato (0 = livre). */
+async function fichasDoContato(
   supabase: SupabaseClient,
   organizationId: string,
   contactId: string,
-): Promise<boolean> {
+): Promise<number> {
   const { data, error } = await supabase
     .from("pdv_customer_links")
-    .select("contact_id")
+    .select("erp_customer_id")
     .eq("organization_id", organizationId)
-    .eq("contact_id", contactId)
-    .maybeSingle();
+    .eq("contact_id", contactId);
   if (error) throw FALHA();
-  return data !== null;
+  return ((data ?? []) as unknown[]).length;
 }
 
 async function nomeDoContato(
@@ -206,6 +210,7 @@ export async function consultarVinculo(
       estado: "vinculado",
       contactId: existente,
       contatoNome: await nomeDoContato(supabase, organizationId, existente),
+      outrasFichas: Math.max(0, (await fichasDoContato(supabase, organizationId, existente)) - 1),
     };
   }
 
@@ -215,11 +220,14 @@ export async function consultarVinculo(
   const contatos = await contatosDoTelefone(supabase, organizationId, telefone);
   if (contatos.length > 1) return { estado: "ambiguo" };
   const unico = contatos[0];
-  if (!unico) return { estado: "livre" };
-  if (await contatoLigadoAOutro(supabase, organizationId, unico.id)) {
-    return { estado: "telefone_de_outro", contatoNome: unico.name ?? "" };
-  }
-  return { estado: "livre" };
+  if (!unico) return { estado: "livre", contato: null };
+  return {
+    estado: "livre",
+    contato: {
+      nome: unico.name ?? "",
+      fichas: await fichasDoContato(supabase, organizationId, unico.id),
+    },
+  };
 }
 
 /** A linha de um contato novo. CPF e e-mail entram só quando `completo`. */
@@ -268,26 +276,76 @@ async function removerContatoOrfao(
 }
 
 /**
+ * Grava no contato os dados do ERP (o ERP é o mestre, ADR-002): nome, e-mail, CPF e nascimento.
+ * O TELEFONE nunca muda (é a chave do vínculo). Dado que o ERP não tem, ou que veio fora do
+ * formato, não apaga o que o CRM já guarda. CPF ou e-mail que já são de OUTRO contato ficam de
+ * fora e o resultado avisa (`semCpfEmail`).
+ */
+async function gravarDadosDoErp(
+  supabase: SupabaseClient,
+  organizationId: string,
+  contactId: string,
+  cliente: ClienteParaEspelho,
+): Promise<{ semCpfEmail: boolean }> {
+  const base: Record<string, unknown> = {};
+  if (cliente.nome.trim()) base.name = cliente.nome;
+  const data = dataDe(cliente);
+  if (data) base.birthdate = data;
+
+  const sensiveis: Record<string, unknown> = {};
+  const email = emailDe(cliente);
+  if (email) sensiveis.email = email;
+  const cpf = cpfDe(cliente);
+  if (cpf) Object.assign(sensiveis, await camposCpfParaGravar(supabase, cpf));
+
+  const gravar = async (patch: Record<string, unknown>) => {
+    if (Object.keys(patch).length === 0) return null;
+    const { error } = await supabase
+      .from("contacts")
+      .update(patch)
+      .eq("organization_id", organizationId)
+      .eq("id", contactId);
+    return error;
+  };
+
+  const erro = await gravar({ ...base, ...sensiveis });
+  if (!erro) return { semCpfEmail: false };
+  if (erro.code !== UNICIDADE) throw FALHA();
+
+  // CPF ou e-mail já são de OUTRO contato: grava o resto e avisa.
+  const semSensiveis = await gravar(base);
+  if (semSensiveis) throw FALHA();
+  return { semCpfEmail: true };
+}
+
+/**
  * Vincula o cliente do ERP a um contato do CRM pelo TELEFONE. Idempotente e seguro sob
  * concorrência: as unicidades do banco decidem, e o 23505 leva ao que já existe.
  *
  *  - já vinculado: devolve o vínculo, sem mudar nada;
  *  - sem telefone utilizável: `cliente_sem_telefone`;
  *  - dois ou mais contatos no número: `contato_ambiguo`;
- *  - o contato do número é de OUTRO cliente do ERP: `telefone_de_outro_cliente` (não se rouba);
- *  - um contato livre: liga; nenhum: cria com os dados do ERP e liga.
+ *  - um contato no número (livre ou já ligado a OUTRA ficha do ERP, ADR-008): liga, e com
+ *    `sobrescrever` o ERP também sobrescreve os dados do contato;
+ *  - nenhum: cria com os dados do ERP e liga.
  */
 export async function vincularClienteDoErp(
   organizationId: string,
   cliente: ClienteParaEspelho,
-  opcoes: OpcoesDoEspelho = {},
+  opcoes: OpcoesDoVinculo = {},
 ): Promise<ResultadoDoVinculo> {
   const supabase = opcoes.supabase ?? createAdminClient();
 
   // 1. Vínculo já existente: devolve sem mudar nada.
   const existente = await vinculoDoErp(supabase, organizationId, cliente.id);
   if (existente) {
-    return { contactId: existente, contatoCriado: false, vinculoNovo: false, semCpfEmail: false };
+    return {
+      contactId: existente,
+      contatoCriado: false,
+      vinculoNovo: false,
+      semCpfEmail: false,
+      dadosAtualizados: false,
+    };
   }
 
   // 2. O telefone é a chave: sem ele não há como ligar.
@@ -324,24 +382,37 @@ export async function vincularClienteDoErp(
   }
   const contactId = (contatos[0] as ContatoVivo).id;
 
-  // 5. Grava o vínculo. 23505: ou o outro pedido já vinculou ESTE cliente (devolve o dele), ou o
-  //    contato já pertence a OUTRO cliente do ERP (não se rouba o vínculo).
+  // 5. Grava o vínculo. Um contato pode ter várias fichas; só ESTA ficha é única (23505 = o outro
+  //    pedido já vinculou o mesmo cliente do ERP: devolve o dele).
   const { error } = await supabase
     .from("pdv_customer_links")
     .insert({ organization_id: organizationId, contact_id: contactId, erp_customer_id: cliente.id })
     .select("contact_id")
     .single();
-  if (!error) return { contactId, contatoCriado, vinculoNovo: true, semCpfEmail };
-  if (error.code !== UNICIDADE) throw FALHA();
-
-  const doOutroPedido = await vinculoDoErp(supabase, organizationId, cliente.id);
-  if (doOutroPedido) {
+  if (error) {
+    if (error.code !== UNICIDADE) throw FALHA();
+    const doOutroPedido = await vinculoDoErp(supabase, organizationId, cliente.id);
+    if (!doOutroPedido) throw FALHA();
     if (contatoCriado && doOutroPedido !== contactId) {
       await removerContatoOrfao(supabase, organizationId, contactId);
     }
-    return { contactId: doOutroPedido, contatoCriado: false, vinculoNovo: false, semCpfEmail: false };
+    return {
+      contactId: doOutroPedido,
+      contatoCriado: false,
+      vinculoNovo: false,
+      semCpfEmail: false,
+      dadosAtualizados: false,
+    };
   }
-  throw TELEFONE_DE_OUTRO();
+
+  // 6. "Atualizar e vincular" num contato que já existia: o ERP sobrescreve. Contato recém-criado
+  //    já nasceu com os dados do ERP.
+  let dadosAtualizados = false;
+  if (opcoes.sobrescrever && !contatoCriado) {
+    ({ semCpfEmail } = await gravarDadosDoErp(supabase, organizationId, contactId, cliente));
+    dadosAtualizados = true;
+  }
+  return { contactId, contatoCriado, vinculoNovo: true, semCpfEmail, dadosAtualizados };
 }
 
 /**
@@ -359,33 +430,6 @@ export async function atualizarContatoDoErp(
   const contactId = await vinculoDoErp(supabase, organizationId, cliente.id);
   if (!contactId) throw SEM_VINCULO();
 
-  const base: Record<string, unknown> = {};
-  if (cliente.nome.trim()) base.name = cliente.nome;
-  const data = dataDe(cliente);
-  if (data) base.birthdate = data;
-
-  const sensiveis: Record<string, unknown> = {};
-  const email = emailDe(cliente);
-  if (email) sensiveis.email = email;
-  const cpf = cpfDe(cliente);
-  if (cpf) Object.assign(sensiveis, await camposCpfParaGravar(supabase, cpf));
-
-  const gravar = async (patch: Record<string, unknown>) => {
-    if (Object.keys(patch).length === 0) return null;
-    const { error } = await supabase
-      .from("contacts")
-      .update(patch)
-      .eq("organization_id", organizationId)
-      .eq("id", contactId);
-    return error;
-  };
-
-  const erro = await gravar({ ...base, ...sensiveis });
-  if (!erro) return { contactId, semCpfEmail: false };
-  if (erro.code !== UNICIDADE) throw FALHA();
-
-  // CPF ou e-mail já são de OUTRO contato: grava o resto e avisa.
-  const semSensiveis = await gravar(base);
-  if (semSensiveis) throw FALHA();
-  return { contactId, semCpfEmail: true };
+  const { semCpfEmail } = await gravarDadosDoErp(supabase, organizationId, contactId, cliente);
+  return { contactId, semCpfEmail };
 }

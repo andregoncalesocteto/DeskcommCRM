@@ -156,9 +156,9 @@ describe("pdv_customer_links: contato espelho, isolamento entre duas organizaç�
     expect(() =>
       sql(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id) values ('${GOV_ORG}', '${GOV_CONTACT_2}', 'erp-100');`),
     ).toThrow(/pdv_customer_links_org_erp_customer_unico/);
-    expect(() =>
-      sql(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id) values ('${GOV_ORG}', '${GOV_CONTACT_1}', 'erp-200');`),
-    ).toThrow(/pdv_customer_links_org_contact_unico/);
+    // ADR-008: um contato PODE ter várias fichas do ERP; a unicidade por contato não existe mais.
+    sql(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id) values ('${GOV_ORG}', '${GOV_CONTACT_1}', 'erp-200');`);
+    sql(`delete from public.pdv_customer_links where organization_id = '${GOV_ORG}' and erp_customer_id = 'erp-200';`);
   });
 
   it("reprovisionar não muda nem perde os vínculos (a atualização de banco com dados)", () => {

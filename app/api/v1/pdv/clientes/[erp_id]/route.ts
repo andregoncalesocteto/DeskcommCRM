@@ -32,9 +32,17 @@ const JANELA_SEGUNDOS = 60;
 function vinculoParaApi(v: EstadoDoVinculo) {
   switch (v.estado) {
     case "vinculado":
-      return { estado: v.estado, contact_id: v.contactId, contato_nome: v.contatoNome };
-    case "telefone_de_outro":
-      return { estado: v.estado, contato_nome: v.contatoNome };
+      return {
+        estado: v.estado,
+        contact_id: v.contactId,
+        contato_nome: v.contatoNome,
+        outras_fichas: v.outrasFichas,
+      };
+    case "livre":
+      return {
+        estado: v.estado,
+        contato: v.contato ? { nome: v.contato.nome, fichas: v.contato.fichas } : null,
+      };
     default:
       return { estado: v.estado };
   }

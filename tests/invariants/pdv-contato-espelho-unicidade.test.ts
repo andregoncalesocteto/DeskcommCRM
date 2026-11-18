@@ -90,18 +90,37 @@ describe("contatos: o que o serviço do espelho assume sobre a unicidade", () =>
   });
 });
 
-describe("pdv_customer_links: o vínculo é único", () => {
-  it("o mesmo cliente do ERP não liga a dois contatos, nem um contato a dois clientes", () => {
+describe("pdv_customer_links: o cliente do ERP é único, o contato pode ter várias fichas (ADR-008)", () => {
+  it("o mesmo cliente do ERP não liga a dois contatos, mas um contato liga a dois clientes", () => {
     sql(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id)
       values ('${GOV_ORG}', '${c(1)}', 'erp-unico');`);
     expect(
       falha(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id)
         values ('${GOV_ORG}', '${c(4)}', 'erp-unico');`),
     ).toMatch(/pdv_customer_links_org_erp_customer_unico/);
+    // o mesmo contato com OUTRA ficha do ERP é permitido
+    sql(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id)
+      values ('${GOV_ORG}', '${c(1)}', 'erp-outro');`);
     expect(
-      falha(`insert into public.pdv_customer_links (organization_id, contact_id, erp_customer_id)
-        values ('${GOV_ORG}', '${c(1)}', 'erp-outro');`),
-    ).toMatch(/pdv_customer_links_org_contact_unico/);
+      sql(`select count(*) from public.pdv_customer_links
+        where organization_id = '${GOV_ORG}' and contact_id = '${c(1)}';`),
+    ).toBe("2");
+  });
+
+  it("banco que ainda tem a constraint antiga (migration 9045) a perde ao reprovisionar, sem perder vínculo", () => {
+    // A segunda ficha do teste anterior sairia da frente da constraint antiga: ela só cabe com um vínculo por contato.
+    sql(`delete from public.pdv_customer_links where organization_id = '${GOV_ORG}' and erp_customer_id = 'erp-outro';`);
+    sql(`alter table public.pdv_customer_links
+      add constraint pdv_customer_links_org_contact_unico unique (organization_id, contact_id);`);
+    expect(
+      sql(`select count(*) from pg_constraint where conname = 'pdv_customer_links_org_contact_unico';`),
+    ).toBe("1");
+    const antes = sql(`select count(*) from public.pdv_customer_links;`);
+    sql(`select public.fn_pdv_provisionar();`);
+    expect(
+      sql(`select count(*) from pg_constraint where conname = 'pdv_customer_links_org_contact_unico';`),
+    ).toBe("0");
+    expect(sql(`select count(*) from public.pdv_customer_links;`)).toBe(antes);
   });
 
   it("o mesmo id do ERP em outra organização é outro vínculo", () => {

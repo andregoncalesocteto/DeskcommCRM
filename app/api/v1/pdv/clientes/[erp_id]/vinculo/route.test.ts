@@ -54,9 +54,12 @@ const CLIENTE: Cliente = {
 };
 
 const ctx = (erpId: string) => ({ params: Promise.resolve({ erp_id: erpId }) });
-const req = (metodo: string, erpId: string) =>
-  new NextRequest(`http://localhost/api/v1/pdv/clientes/${erpId}/vinculo`, { method: metodo });
-const vincular = (erpId = "c-1") => POST(req("POST", erpId), ctx(erpId));
+const req = (metodo: string, erpId: string, corpo?: string) =>
+  new NextRequest(`http://localhost/api/v1/pdv/clientes/${erpId}/vinculo`, {
+    method: metodo,
+    ...(corpo === undefined ? {} : { body: corpo, headers: { "content-type": "application/json" } }),
+  });
+const vincular = (erpId = "c-1", corpo?: string) => POST(req("POST", erpId, corpo), ctx(erpId));
 const atualizar = (erpId = "c-1") => PATCH(req("PATCH", erpId), ctx(erpId));
 
 function como(orgId: string | null) {
@@ -75,6 +78,7 @@ beforeEach(() => {
     contatoCriado: true,
     vinculoNovo: true,
     semCpfEmail: false,
+    dadosAtualizados: false,
   });
   vi.mocked(atualizarContatoDoErp)
     .mockReset()
@@ -91,11 +95,12 @@ describe("POST /api/v1/pdv/clientes/{erp_id}/vinculo (Vincular ao CRM)", () => {
     const res = await vincular();
     expect(res.status).toBe(201);
     expect(obterCliente).toHaveBeenCalledWith(ORG_A, "c-1", { camposSensiveis: true });
-    expect(vincularClienteDoErp).toHaveBeenCalledWith(ORG_A, CLIENTE);
+    expect(vincularClienteDoErp).toHaveBeenCalledWith(ORG_A, CLIENTE, { sobrescrever: false });
     expect((await res.json()).data).toEqual({
       contact_id: "ct-1",
       contato_criado: true,
       vinculo_novo: true,
+      dados_atualizados: false,
       sem_cpf_email: false,
     });
     expect(audit).toHaveBeenCalledTimes(1);
@@ -105,7 +110,7 @@ describe("POST /api/v1/pdv/clientes/{erp_id}/vinculo (Vincular ao CRM)", () => {
         organizationId: ORG_A,
         actorUserId: "u1",
         resourceId: "ct-1",
-        metadata: { erp_customer_id: "c-1", contato_criado: true },
+        metadata: { erp_customer_id: "c-1", contato_criado: true, dados_atualizados: false },
       }),
     );
   });
@@ -116,6 +121,7 @@ describe("POST /api/v1/pdv/clientes/{erp_id}/vinculo (Vincular ao CRM)", () => {
       contatoCriado: false,
       vinculoNovo: false,
       semCpfEmail: false,
+      dadosAtualizados: false,
     });
     const res = await vincular();
     expect(res.status).toBe(200);
@@ -128,13 +134,13 @@ describe("POST /api/v1/pdv/clientes/{erp_id}/vinculo (Vincular ao CRM)", () => {
       contatoCriado: true,
       vinculoNovo: true,
       semCpfEmail: true,
+      dadosAtualizados: false,
     });
     expect((await (await vincular()).json()).data.sem_cpf_email).toBe(true);
   });
 
   it.each([
     ["contato_ambiguo", 409],
-    ["telefone_de_outro_cliente", 409],
     ["cliente_sem_telefone", 422],
   ] as const)("%s vira %i, sem auditar", async (codigo, status) => {
     vi.mocked(vincularClienteDoErp).mockRejectedValue(new ContatoEspelhoError(codigo, "Mensagem fixa."));
@@ -142,6 +148,34 @@ describe("POST /api/v1/pdv/clientes/{erp_id}/vinculo (Vincular ao CRM)", () => {
     expect(res.status).toBe(status);
     expect((await res.json()).error.code).toBe(codigo);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("corpo { sobrescrever: true } chega ao serviço e o aviso de auditoria diz que os dados foram atualizados", async () => {
+    vi.mocked(vincularClienteDoErp).mockResolvedValue({
+      contactId: "ct-1",
+      contatoCriado: false,
+      vinculoNovo: true,
+      semCpfEmail: false,
+      dadosAtualizados: true,
+    });
+    const res = await vincular("c-1", JSON.stringify({ sobrescrever: true }));
+    expect(res.status).toBe(201);
+    expect(vincularClienteDoErp).toHaveBeenCalledWith(ORG_A, CLIENTE, { sobrescrever: true });
+    expect((await res.json()).data.dados_atualizados).toBe(true);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ dados_atualizados: true }) }),
+    );
+  });
+
+  it("corpo vazio ou {} não sobrescreve; corpo inválido é 422 e não escreve nada", async () => {
+    await vincular("c-1", "{}");
+    expect(vincularClienteDoErp).toHaveBeenLastCalledWith(ORG_A, CLIENTE, { sobrescrever: false });
+    for (const ruim of ["não é json", JSON.stringify({ sobrescrever: "sim" }), JSON.stringify({ outro: 1 })]) {
+      vi.mocked(vincularClienteDoErp).mockClear();
+      const res = await vincular("c-1", ruim);
+      expect(res.status).toBe(422);
+      expect(vincularClienteDoErp).not.toHaveBeenCalled();
+    }
   });
 
   it("falha ao vincular é 500", async () => {
@@ -203,7 +237,7 @@ describe("POST /api/v1/pdv/clientes/{erp_id}/vinculo (Vincular ao CRM)", () => {
   it("CPF e telefone não vão para a auditoria nem para a resposta de erro", async () => {
     await vincular();
     vi.mocked(vincularClienteDoErp).mockRejectedValue(
-      new ContatoEspelhoError("telefone_de_outro_cliente", "O contato já está vinculado."),
+      new ContatoEspelhoError("contato_ambiguo", "Há mais de um contato com este telefone."),
     );
     const erro = JSON.stringify(await (await vincular()).json());
     const auditado = JSON.stringify(vi.mocked(audit).mock.calls);

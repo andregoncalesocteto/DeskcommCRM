@@ -128,23 +128,25 @@ Ao abrir um cliente da lista:
 - Nenhum botão de editar dados do cliente (não existe nesta fase).
 
 **Abrir a ficha só lê:** não cria contato nem vínculo (ADR-007). O bloco **"Vínculo com o CRM"**,
-no topo da ficha, mostra a situação e o botão cabível:
+no topo da ficha, mostra a situação e os botões cabíveis. Um contato pode ter **várias fichas do ERP**
+(ADR-008): o ERP duplica pessoas, e o telefone é a chave do contato.
 
 | Situação | O que a tela mostra |
 | --- | --- |
-| Cliente ainda não está no CRM | "Este cliente ainda não está no CRM." e o botão **Vincular ao CRM** |
-| Já vinculado | "Vinculado ao contato: [nome]" e o botão **Atualizar dados** |
-| O telefone já é de outro cliente do ERP | O nome do contato dono do número; sem botão |
+| Não há contato com o telefone | "Este cliente ainda não está no CRM." e o botão **Vincular** (cria o contato com os dados do ERP e liga) |
+| Já existe contato com o telefone | "Já existe um contato com este telefone: [nome]" (e quantas outras fichas já estão ligadas a ele) e os botões **Vincular** e **Atualizar e vincular** |
+| Já vinculado | "Vinculado ao contato: [nome]" (e quantas outras fichas), e o botão **Atualizar dados** |
 | Cliente sem telefone no ERP | Explicação; sem botão |
 | Dois contatos no mesmo número (com e sem o 9) | Pede ao gerente que una os contatos; sem botão |
 
-- **Vincular ao CRM** liga o cliente ao contato que tem o mesmo **telefone** (com ou sem o 9 e o 55).
-  Se não houver contato, cria um com os dados do ERP. O telefone é a única chave entre o ERP e o CRM:
-  CPF e e-mail não servem para achar contato. Se o CPF ou o e-mail já forem de outro contato, o
-  contato novo nasce sem eles e a tela avisa. Quem vincula primeiro fica com o telefone: o segundo
-  cliente do ERP com o mesmo número só pode ser consultado.
-- **Atualizar dados** faz o ERP sobrescrever nome, e-mail, CPF e nascimento do contato vinculado.
+- **Vincular** liga a ficha ao contato do telefone e **não altera** o contato. A ficha do ERP segue
+  só no ERP; o que o PDV usa para o pedido é a ficha vinculada.
+- **Atualizar e vincular** liga e faz o ERP **sobrescrever** nome, e-mail, CPF e nascimento do contato.
+  Pede confirmação com o nome atual do contato, porque o telefone pode ser de pessoas diferentes.
   O telefone nunca muda, e dado que o ERP não tem não apaga o que o CRM já guarda.
+- **Atualizar dados** (ficha já vinculada) puxa de novo os dados do ERP para o contato.
+- O telefone é a única chave entre o ERP e o CRM: CPF e e-mail não servem para achar contato. Se o
+  CPF ou o e-mail já forem de outro contato, eles não são copiados e a tela avisa.
 - Cada ação gera uma linha de auditoria (`pdv.customer.linked`, `pdv.customer.updated`), sem dado pessoal.
 
 ### 2.4 Mensagens de erro e o que fazer
@@ -308,7 +310,7 @@ do celular na busca por telefone.
 Foram tomadas pelos agentes e não vêm do contrato:
 
 - **Status HTTP:** `erp_nao_configurado` 409; ERP fora do ar 502 e tempo esgotado 504 (ambos
-  `erp_indisponivel`); `termo_invalido` 422; cliente inexistente 404. Nas ações de vínculo: contato ambíguo 409, telefone de outro cliente 409, sem vínculo 409, cliente sem telefone 422.
+  `erp_indisponivel`); `termo_invalido` 422; cliente inexistente 404. Nas ações de vínculo: contato ambíguo 409, sem vínculo 409, cliente sem telefone 422.
 - **LGPD do vínculo:** `pdv_customer_links` guarda só ids opacos e ficou fora de
   `modulo_secoes_lgpd` (allowlist com motivo). Anonimizar o contato deixa o vínculo apontando
   para contato anônimo; o apagamento do cliente se cumpre no ERP.

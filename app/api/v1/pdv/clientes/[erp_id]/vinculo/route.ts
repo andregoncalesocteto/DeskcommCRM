@@ -1,18 +1,21 @@
 /**
  * Vínculo do cliente do ERP com o contato do CRM, por ação do atendente (ADR-007).
  *
- *   POST  /api/v1/pdv/clientes/{erp_id}/vinculo   "Vincular ao CRM": liga pelo TELEFONE, criando o
- *                                                  contato se não houver.
+ *   POST  /api/v1/pdv/clientes/{erp_id}/vinculo   "Vincular": liga pelo TELEFONE, criando o contato
+ *                                                  se não houver. Corpo opcional `{ sobrescrever: true }`
+ *                                                  ("Atualizar e vincular"): o ERP também sobrescreve os
+ *                                                  dados do contato. Um contato pode ter várias fichas
+ *                                                  do ERP (ADR-008).
  *   PATCH /api/v1/pdv/clientes/{erp_id}/vinculo   "Atualizar dados": o ERP sobrescreve nome, e-mail,
  *                                                  CPF e nascimento do contato vinculado. O telefone
  *                                                  nunca muda.
  *
  * Papel mínimo `agent`. Módulo desligado = 404. `requireSupportWrite(` antes do efeito. Os dados
- * saem do ERP, nunca do corpo: a rota não lê corpo. A organização vem da sessão. As duas
+ * saem do ERP, nunca do corpo: o corpo só escolhe se sobrescreve. A organização vem da sessão. As duas
  * operações são idempotentes por natureza (o POST repetido devolve o mesmo vínculo; o PATCH
  * repetido grava os mesmos valores), então não exigem `Idempotency-Key`. Cada efeito audita uma
- * linha, sem dado pessoal. Erros de domínio: 409 `contato_ambiguo` | `telefone_de_outro_cliente` |
- * `sem_vinculo`; 422 `cliente_sem_telefone`.
+ * linha, sem dado pessoal. Erros de domínio: 409 `contato_ambiguo` | `sem_vinculo`; 422
+ * `cliente_sem_telefone`.
  */
 import { randomUUID } from "node:crypto";
 
@@ -38,6 +41,7 @@ export const dynamic = "force-dynamic";
 const TETO_POR_USUARIO = 30;
 const JANELA_SEGUNDOS = 60;
 const IdSchema = z.string().trim().min(1).max(100);
+const CorpoSchema = z.object({ sobrescrever: z.boolean().optional() }).strict();
 
 type Operacao = "vincular" | "atualizar";
 
@@ -45,6 +49,7 @@ type Guarda = (organizationId: string) => Promise<Response | null>;
 
 async function executar(
   operacao: Operacao,
+  req: NextRequest,
   ctx: { params: Promise<{ erp_id: string }> },
   guarda: Guarda,
 ): Promise<Response> {
@@ -73,6 +78,23 @@ async function executar(
     return fail("validation_failed", "Identificador do cliente inválido.", 422, { requestId });
   }
 
+  // Corpo vazio é válido (só o POST lê `sobrescrever`).
+  let sobrescrever = false;
+  if (operacao === "vincular") {
+    const texto = await req.text();
+    if (texto.trim() !== "") {
+      let bruto: unknown;
+      try {
+        bruto = JSON.parse(texto);
+      } catch {
+        bruto = null;
+      }
+      const corpo = CorpoSchema.safeParse(bruto);
+      if (!corpo.success) return fail("validation_failed", "Corpo inválido.", 422, { requestId });
+      sobrescrever = corpo.data.sobrescrever === true;
+    }
+  }
+
   try {
     const cliente = await obterCliente(org.orgId, id.data, { camposSensiveis: true });
 
@@ -80,7 +102,7 @@ async function executar(
     if (bloqueio) return bloqueio;
 
     if (operacao === "vincular") {
-      const r = await vincularClienteDoErp(org.orgId, cliente);
+      const r = await vincularClienteDoErp(org.orgId, cliente, { sobrescrever });
       // Só audita o que mudou: repetir o clique em quem já está vinculado não é efeito.
       if (r.vinculoNovo) {
         void audit({
@@ -90,7 +112,11 @@ async function executar(
           resourceType: "contact",
           resourceId: r.contactId,
           requestId,
-          metadata: { erp_customer_id: cliente.id, contato_criado: r.contatoCriado },
+          metadata: {
+            erp_customer_id: cliente.id,
+            contato_criado: r.contatoCriado,
+            dados_atualizados: r.dadosAtualizados,
+          },
         });
       }
       return ok(
@@ -98,6 +124,7 @@ async function executar(
           contact_id: r.contactId,
           contato_criado: r.contatoCriado,
           vinculo_novo: r.vinculoNovo,
+          dados_atualizados: r.dadosAtualizados,
           sem_cpf_email: r.semCpfEmail,
         },
         { requestId, status: r.vinculoNovo ? 201 : 200 },
@@ -122,7 +149,6 @@ async function executar(
     if (err instanceof ContatoEspelhoError) {
       switch (err.codigo) {
         case "contato_ambiguo":
-        case "telefone_de_outro_cliente":
         case "sem_vinculo":
           return fail(err.codigo, err.message, 409, { requestId });
         case "cliente_sem_telefone":
@@ -136,15 +162,15 @@ async function executar(
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ erp_id: string }> },
 ): Promise<Response> {
-  return executar("vincular", ctx, (orgId) => requireSupportWrite(orgId));
+  return executar("vincular", req, ctx, (orgId) => requireSupportWrite(orgId));
 }
 
 export async function PATCH(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ erp_id: string }> },
 ): Promise<Response> {
-  return executar("atualizar", ctx, (orgId) => requireSupportWrite(orgId));
+  return executar("atualizar", req, ctx, (orgId) => requireSupportWrite(orgId));
 }
