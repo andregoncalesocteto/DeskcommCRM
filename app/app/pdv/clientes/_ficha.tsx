@@ -34,7 +34,7 @@ type Endereco = {
 type Vinculo =
   | { estado: "vinculado"; contact_id: string; contato_nome: string }
   | { estado: "telefone_de_outro"; contato_nome: string }
-  | { estado: "livre" | "sem_telefone" | "ambiguo" };
+  | { estado: "livre" | "telefone_ausente" | "ambiguo" };
 
 type Ficha = {
   id: string;
@@ -125,7 +125,7 @@ function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo })
     );
   } else if (vinculo.estado === "telefone_de_outro") {
     texto = `${t("Este telefone já está vinculado a outro cliente do ERP")}: ${vinculo.contato_nome}`;
-  } else if (vinculo.estado === "sem_telefone") {
+  } else if (vinculo.estado === "telefone_ausente") {
     texto = t("Este cliente não tem telefone no ERP. Sem telefone não há como vincular ao CRM.");
   } else {
     texto = t(

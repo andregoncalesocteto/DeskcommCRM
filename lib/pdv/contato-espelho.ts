@@ -43,7 +43,7 @@ export type EstadoDoVinculo =
   | { estado: "livre" }
   /** O contato com este telefone já pertence a OUTRO cliente do ERP (telefone repetido no ERP). */
   | { estado: "telefone_de_outro"; contatoNome: string }
-  | { estado: "sem_telefone" }
+  | { estado: "telefone_ausente" }
   /** Mais de um contato vivo para o mesmo número (grafias com e sem o nono dígito). */
   | { estado: "ambiguo" };
 
@@ -210,7 +210,7 @@ export async function consultarVinculo(
   }
 
   const telefone = telefoneDe(cliente as ClienteParaEspelho);
-  if (!telefone) return { estado: "sem_telefone" };
+  if (!telefone) return { estado: "telefone_ausente" };
 
   const contatos = await contatosDoTelefone(supabase, organizationId, telefone);
   if (contatos.length > 1) return { estado: "ambiguo" };

@@ -377,7 +377,7 @@ describe("consultarVinculo (só lê)", () => {
   it("sem_telefone e ambiguo", async () => {
     const { tabelas, supabase } = banco();
     expect(await consultarVinculo(ORG, { id: "c-0001", telefone: null }, { supabase })).toEqual({
-      estado: "sem_telefone",
+      estado: "telefone_ausente",
     });
     tabelas.contacts.push(
       contatoExistente({ id: "a", phone_number: "+5519998765432" }),

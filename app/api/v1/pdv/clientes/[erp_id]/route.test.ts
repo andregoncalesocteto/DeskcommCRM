@@ -146,7 +146,7 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
       estado: "telefone_de_outro",
       contato_nome: "Outra Maria",
     });
-    for (const estado of ["sem_telefone", "ambiguo"] as const) {
+    for (const estado of ["telefone_ausente", "ambiguo"] as const) {
       vi.mocked(consultarVinculo).mockResolvedValueOnce({ estado });
       expect((await (await chamar()).json()).data.vinculo).toEqual({ estado });
     }

@@ -41,9 +41,12 @@ const IdSchema = z.string().trim().min(1).max(100);
 
 type Operacao = "vincular" | "atualizar";
 
+type Guarda = (organizationId: string) => Promise<Response | null>;
+
 async function executar(
   operacao: Operacao,
   ctx: { params: Promise<{ erp_id: string }> },
+  guarda: Guarda,
 ): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("agent", { requestId, resource: "pdv_cliente" });
@@ -73,7 +76,7 @@ async function executar(
   try {
     const cliente = await obterCliente(org.orgId, id.data, { camposSensiveis: true });
 
-    const bloqueio = await requireSupportWrite(org.orgId);
+    const bloqueio = await guarda(org.orgId);
     if (bloqueio) return bloqueio;
 
     if (operacao === "vincular") {
@@ -136,12 +139,12 @@ export async function POST(
   _req: NextRequest,
   ctx: { params: Promise<{ erp_id: string }> },
 ): Promise<Response> {
-  return executar("vincular", ctx);
+  return executar("vincular", ctx, (orgId) => requireSupportWrite(orgId));
 }
 
 export async function PATCH(
   _req: NextRequest,
   ctx: { params: Promise<{ erp_id: string }> },
 ): Promise<Response> {
-  return executar("atualizar", ctx);
+  return executar("atualizar", ctx, (orgId) => requireSupportWrite(orgId));
 }

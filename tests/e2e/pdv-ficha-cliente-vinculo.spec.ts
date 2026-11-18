@@ -71,7 +71,7 @@ async function interceptar(page: Page, escritas: string[]) {
           ),
         );
       }
-      if (id === "c2") return rota.fulfill(json(200, ficha("c2", "Maria Sem Telefone", null, { estado: "sem_telefone" })));
+      if (id === "c2") return rota.fulfill(json(200, ficha("c2", "Maria Sem Telefone", null, { estado: "telefone_ausente" })));
       if (id === "c3") return rota.fulfill(json(200, ficha("c3", "Maria Falha", "(19) 98123-4567", { estado: "livre" })));
       return rota.fulfill(json(404, { error: { code: "not_found", message: "x" } }));
     }
