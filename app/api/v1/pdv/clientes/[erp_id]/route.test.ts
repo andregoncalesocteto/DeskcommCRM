@@ -1,6 +1,7 @@
 /**
- * Ficha do cliente do PDV: ficha completa, sem endereço, inexistente, contato ambíguo,
- * isolamento entre tenants, papel, módulo, limite e ausência de CPF/nascimento em log.
+ * Ficha do cliente do PDV (somente leitura, ADR-007): ficha completa com o estado do vínculo, sem
+ * endereço, inexistente, isolamento entre tenants, papel, módulo, limite, ausência de CPF/nascimento
+ * em log e a prova de que abrir a ficha NÃO escreve nada (nem vínculo, nem contato).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -8,10 +9,14 @@ import { NextRequest } from "next/server";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
 import type * as espelho from "@/lib/pdv/contato-espelho";
-import { ContatoEspelhoError, vincularClienteDoErp } from "@/lib/pdv/contato-espelho";
+import {
+  atualizarContatoDoErp,
+  ContatoEspelhoError,
+  consultarVinculo,
+  vincularClienteDoErp,
+} from "@/lib/pdv/contato-espelho";
 import { obterCliente } from "@/lib/pdv/erp/cliente";
 import { ErpPdvError } from "@/lib/pdv/erp/resposta";
 import type { Cliente } from "@/lib/pdv/erp/tipos";
@@ -21,11 +26,12 @@ import { GET } from "./route";
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn(() => ({})) }));
 vi.mock("@/lib/instalacao/modulos", () => ({ moduloLigado: vi.fn() }));
-vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn() }));
 vi.mock("@/lib/pdv/erp/cliente", () => ({ obterCliente: vi.fn() }));
 vi.mock("@/lib/pdv/contato-espelho", async (orig) => ({
   ...(await orig<typeof espelho>()),
+  consultarVinculo: vi.fn(),
   vincularClienteDoErp: vi.fn(),
+  atualizarContatoDoErp: vi.fn(),
 }));
 vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({
   checkRateLimit: vi.fn(async () => ({ allowed: true })),
@@ -85,25 +91,24 @@ function como(orgId: string | null) {
 beforeEach(() => {
   vi.mocked(moduloLigado).mockResolvedValue(true);
   vi.mocked(obterCliente).mockReset().mockResolvedValue(CLIENTE);
-  vi.mocked(vincularClienteDoErp)
-    .mockReset()
-    .mockResolvedValue({ contactId: "ct-1", contatoCriado: true, vinculoNovo: true });
-  vi.mocked(requireSupportWrite).mockReset().mockResolvedValue(null);
+  vi.mocked(consultarVinculo).mockReset().mockResolvedValue({ estado: "livre" });
+  vi.mocked(vincularClienteDoErp).mockReset();
+  vi.mocked(atualizarContatoDoErp).mockReset();
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   como(ORG_A);
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
-  it("ficha completa: pede campos sensíveis, vincula o contato e devolve tudo", async () => {
+  it("ficha completa: pede campos sensíveis, consulta o vínculo e devolve tudo", async () => {
     const res = await chamar();
     expect(res.status).toBe(200);
     expect(obterCliente).toHaveBeenCalledWith(ORG_A, "c-1", { camposSensiveis: true });
-    expect(vincularClienteDoErp).toHaveBeenCalledWith(ORG_A, CLIENTE);
+    expect(consultarVinculo).toHaveBeenCalledWith(ORG_A, CLIENTE);
     const { data } = await res.json();
     expect(data).toMatchObject({
       id: "c-1",
-      contact_id: "ct-1",
+      vinculo: { estado: "livre" },
       nome: "Maria da Silva",
       telefone: "+5519998765432",
       email: "maria@exemplo.com",
@@ -114,6 +119,37 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
     expect(data.enderecos.filter((e: { principal: boolean }) => e.principal)).toHaveLength(1);
     expect(data.enderecos[0].loja_entrega).toEqual({ codigo: "01", sigla: "CMP" });
     expect(data.enderecos[1].loja_entrega).toBeNull();
+  });
+
+  it("abrir a ficha só lê: nunca cria vínculo nem contato (ADR-007)", async () => {
+    await chamar();
+    expect(vincularClienteDoErp).not.toHaveBeenCalled();
+    expect(atualizarContatoDoErp).not.toHaveBeenCalled();
+  });
+
+  it("devolve o estado do vínculo em snake_case, com o nome do contato só quando existe", async () => {
+    vi.mocked(consultarVinculo).mockResolvedValueOnce({
+      estado: "vinculado",
+      contactId: "ct-1",
+      contatoNome: "Maria da Silva",
+    });
+    expect((await (await chamar()).json()).data.vinculo).toEqual({
+      estado: "vinculado",
+      contact_id: "ct-1",
+      contato_nome: "Maria da Silva",
+    });
+    vi.mocked(consultarVinculo).mockResolvedValueOnce({
+      estado: "telefone_de_outro",
+      contatoNome: "Outra Maria",
+    });
+    expect((await (await chamar()).json()).data.vinculo).toEqual({
+      estado: "telefone_de_outro",
+      contato_nome: "Outra Maria",
+    });
+    for (const estado of ["sem_telefone", "ambiguo"] as const) {
+      vi.mocked(consultarVinculo).mockResolvedValueOnce({ estado });
+      expect((await (await chamar()).json()).data.vinculo).toEqual({ estado });
+    }
   });
 
   it("ERP sem endereço principal: principal ausente sai como false na API", async () => {
@@ -144,34 +180,21 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
     expect(data.data_nascimento).toBeNull();
   });
 
-  it("cliente inexistente no ERP vira 404 e não vincula nada", async () => {
+  it("cliente inexistente no ERP vira 404 e não consulta o vínculo", async () => {
     vi.mocked(obterCliente).mockRejectedValue(new ErpPdvError("nao_encontrado", "Sem cliente."));
     const res = await chamar("c-x");
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe("not_found");
-    expect(vincularClienteDoErp).not.toHaveBeenCalled();
+    expect(consultarVinculo).not.toHaveBeenCalled();
   });
 
-  it("contato ambíguo vira 409 com mensagem para o atendente", async () => {
-    vi.mocked(vincularClienteDoErp).mockRejectedValue(
-      new ContatoEspelhoError("contato_ambiguo", "Há mais de um contato que pode ser deste cliente.", {
-        motivo: "varios_candidatos",
-      }),
-    );
-    const res = await chamar();
-    expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body.error.code).toBe("contato_ambiguo");
-    expect(body.error.message).toMatch(/mais de um contato/);
-    expect(JSON.stringify(body)).not.toContain(CPF);
-  });
-
-  it("falha ao vincular é 500 sem dado pessoal", async () => {
-    vi.mocked(vincularClienteDoErp).mockRejectedValue(
+  it("falha ao ler o vínculo é 500 sem dado pessoal", async () => {
+    vi.mocked(consultarVinculo).mockRejectedValue(
       new ContatoEspelhoError("falha_ao_vincular", "Não foi possível vincular o contato do cliente."),
     );
     const res = await chamar();
     expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).not.toContain(CPF);
   });
 
   it("erros do ERP seguem a tabela da busca (502, 504, 409)", async () => {
@@ -190,16 +213,7 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
     como(ORG_B);
     await chamar();
     expect(vi.mocked(obterCliente).mock.calls.map((c) => c[0])).toEqual([ORG_A, ORG_B]);
-    expect(vi.mocked(vincularClienteDoErp).mock.calls.map((c) => c[0])).toEqual([ORG_A, ORG_B]);
-  });
-
-  it("acompanhamento somente leitura é barrado antes do vínculo", async () => {
-    vi.mocked(requireSupportWrite).mockResolvedValue(
-      fail("forbidden", "Este acompanhamento permite somente leitura.", 403) as never,
-    );
-    const res = await chamar();
-    expect(res.status).toBe(403);
-    expect(vincularClienteDoErp).not.toHaveBeenCalled();
+    expect(vi.mocked(consultarVinculo).mock.calls.map((c) => c[0])).toEqual([ORG_A, ORG_B]);
   });
 
   it("módulo desligado devolve 404 sem chamar o ERP", async () => {
@@ -234,8 +248,8 @@ describe("GET /api/v1/pdv/clientes/{erp_id}", () => {
       vi.spyOn(console, m).mockImplementation(() => undefined),
     );
     await chamar();
-    vi.mocked(vincularClienteDoErp).mockRejectedValueOnce(
-      new ContatoEspelhoError("contato_ambiguo", "Há mais de um contato.", { motivo: "x" }),
+    vi.mocked(consultarVinculo).mockRejectedValueOnce(
+      new ContatoEspelhoError("falha_ao_vincular", "Não foi possível vincular o contato do cliente."),
     );
     const erro = await (await chamar()).json();
     vi.mocked(obterCliente).mockRejectedValueOnce(new ErpPdvError("erp_indisponivel", "Fora do ar."));

@@ -225,7 +225,7 @@ Ordem estrita: cada história só depende das anteriores. Toda história cumpre 
 - FR-4: A camada do ERP lê o servidor cadastrado **para a organização**, sem depender de turno de conversa, e nunca expõe a chave nem o endereço completo em log ou auditoria.
 - FR-5: Sucesso do ERP vem em `structuredContent`; erro vem como texto JSON com código estável.
 - FR-6: A busca de cliente não devolve CPF, telefone nem e-mail na lista; só a ficha traz esses campos, e só quando o PDV os pede.
-- FR-7: Ao abrir a ficha, o CRM encontra ou cria o contato espelho sem duplicar, ou recusa quando há mais de um candidato.
+- FR-7: ~~Ao abrir a ficha, o CRM encontra ou cria o contato espelho sem duplicar, ou recusa quando há mais de um candidato.~~ **Superado pelo [ADR-007](adr/ADR-007-vinculo-do-contato-por-acao-do-atendente.md) (2026-11-18):** abrir a ficha só lê; o vínculo com o contato do CRM é feito pelo telefone, pelo botão "Vincular ao CRM".
 - FR-8: Com o ERP fora do ar, a identificação mostra o erro e espera; não há cadastro provisório.
 - FR-9: Toda rota resolve o tenant da sessão e valida a loja contra as lojas do tenant; nenhum dado de tenant vem do corpo da requisição.
 - FR-10: Toda mutação gera auditoria sem dado pessoal e aceita idempotência quando cria.

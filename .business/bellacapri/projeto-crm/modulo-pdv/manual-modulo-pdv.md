@@ -125,12 +125,27 @@ Ao abrir um cliente da lista:
   campo ausente aparece como "Não informado".
 - **Endereços:** selo **"Principal"**, **"Loja de entrega"** ou
   "Loja de entrega ainda não definida"; lista vazia tem estado próprio.
-- Nenhum botão de editar (não existe nesta fase).
+- Nenhum botão de editar dados do cliente (não existe nesta fase).
 
-Abrir a ficha **cria ou reaproveita o contato espelho** no CRM e o vincula ao cliente do ERP.
-Dois atendentes abrindo o mesmo cliente ao mesmo tempo geram **um** contato e **um** vínculo.
-Se dois clientes do ERP colidirem no mesmo telefone/CPF, a tela mostra orientação (409) e
-**nunca funde** em silêncio.
+**Abrir a ficha só lê:** não cria contato nem vínculo (ADR-007). O bloco **"Vínculo com o CRM"**,
+no topo da ficha, mostra a situação e o botão cabível:
+
+| Situação | O que a tela mostra |
+| --- | --- |
+| Cliente ainda não está no CRM | "Este cliente ainda não está no CRM." e o botão **Vincular ao CRM** |
+| Já vinculado | "Vinculado ao contato: [nome]" e o botão **Atualizar dados** |
+| O telefone já é de outro cliente do ERP | O nome do contato dono do número; sem botão |
+| Cliente sem telefone no ERP | Explicação; sem botão |
+| Dois contatos no mesmo número (com e sem o 9) | Pede ao gerente que una os contatos; sem botão |
+
+- **Vincular ao CRM** liga o cliente ao contato que tem o mesmo **telefone** (com ou sem o 9 e o 55).
+  Se não houver contato, cria um com os dados do ERP. O telefone é a única chave entre o ERP e o CRM:
+  CPF e e-mail não servem para achar contato. Se o CPF ou o e-mail já forem de outro contato, o
+  contato novo nasce sem eles e a tela avisa. Quem vincula primeiro fica com o telefone: o segundo
+  cliente do ERP com o mesmo número só pode ser consultado.
+- **Atualizar dados** faz o ERP sobrescrever nome, e-mail, CPF e nascimento do contato vinculado.
+  O telefone nunca muda, e dado que o ERP não tem não apaga o que o CRM já guarda.
+- Cada ação gera uma linha de auditoria (`pdv.customer.linked`, `pdv.customer.updated`), sem dado pessoal.
 
 ### 2.4 Mensagens de erro e o que fazer
 
@@ -293,7 +308,7 @@ do celular na busca por telefone.
 Foram tomadas pelos agentes e não vêm do contrato:
 
 - **Status HTTP:** `erp_nao_configurado` 409; ERP fora do ar 502 e tempo esgotado 504 (ambos
-  `erp_indisponivel`); `termo_invalido` 422; cliente inexistente 404; contato ambíguo 409.
+  `erp_indisponivel`); `termo_invalido` 422; cliente inexistente 404. Nas ações de vínculo: contato ambíguo 409, telefone de outro cliente 409, sem vínculo 409, cliente sem telefone 422.
 - **LGPD do vínculo:** `pdv_customer_links` guarda só ids opacos e ficou fora de
   `modulo_secoes_lgpd` (allowlist com motivo). Anonimizar o contato deixa o vínculo apontando
   para contato anônimo; o apagamento do cliente se cumpre no ERP.

@@ -6,7 +6,8 @@
  * INTERCEPTADA: nada fala com o ERP. Afirma: ficha somente leitura (sem botão de editar, adicionar,
  * remover ou selecionar), "Não informado" para campo ausente, CPF só com os quatro últimos dígitos,
  * CPF e nascimento fora da URL e do storage, nome longo sem estourar o layout, e os estados de
- * carregando, erro com "Tentar de novo", não encontrado e contato ambíguo. Alvos de 44 px medidos
+ * carregando, erro com "Tentar de novo", não encontrado e telefone já vinculado a outro cliente (ADR-007:
+ * abrir a ficha não escreve; os botões de vínculo ficam em `pdv-ficha-cliente-vinculo`). Alvos de 44 px medidos
  * com `getBoundingClientRect`.
  */
 import * as fs from "node:fs";
@@ -38,7 +39,7 @@ const FICHAS: Record<string, { status: number; corpo: unknown }> = {
     status: 200,
     corpo: {
       data: {
-        id: "c1", contact_id: "k1", nome: "Maria Oliveira", telefone: "(19) 99876-5432",
+        id: "c1", vinculo: { estado: "livre" }, nome: "Maria Oliveira", telefone: "(19) 99876-5432",
         email: "maria.oliveira@email.com", cpf: "52998224725", data_nascimento: "1988-03-14", enderecos: [],
       },
     },
@@ -46,11 +47,19 @@ const FICHAS: Record<string, { status: number; corpo: unknown }> = {
   c2: {
     status: 200,
     corpo: {
-      data: { id: "c2", contact_id: "k2", nome: NOME_LONGO, telefone: "(19) 98123-4567", email: null, cpf: null, data_nascimento: null, enderecos: [] },
+      data: { id: "c2", vinculo: { estado: "vinculado", contact_id: "k2", contato_nome: "Maria de Fátima" }, nome: NOME_LONGO, telefone: "(19) 98123-4567", email: null, cpf: null, data_nascimento: null, enderecos: [] },
     },
   },
   c4: { status: 404, corpo: { error: { code: "not_found", message: "Cliente não encontrado no ERP." } } },
-  c5: { status: 409, corpo: { error: { code: "contato_ambiguo", message: "Mais de um contato." } } },
+  c5: {
+    status: 200,
+    corpo: {
+      data: {
+        id: "c5", vinculo: { estado: "telefone_de_outro", contato_nome: "Maria Original" }, nome: "Maria Duplicada",
+        telefone: "(17) 98229-0042", email: null, cpf: "11144477735", data_nascimento: null, enderecos: [],
+      },
+    },
+  },
 };
 
 async function interceptar(page: Page, chamadas: string[], opcoes: { falhaC3Vezes?: number; atrasoMs?: number } = {}) {
@@ -68,7 +77,7 @@ async function interceptar(page: Page, chamadas: string[], opcoes: { falhaC3Veze
       }
       if (id === "c3") {
         return rota.fulfill(
-          json(200, { data: { id: "c3", contact_id: "k3", nome: "Mariana Lopes", telefone: "(19) 99701-2233", email: null, cpf: "11144477735", data_nascimento: "2001-12-01", enderecos: [] } }),
+          json(200, { data: { id: "c3", vinculo: { estado: "livre" }, nome: "Mariana Lopes", telefone: "(19) 99701-2233", email: null, cpf: "11144477735", data_nascimento: "2001-12-01", enderecos: [] } }),
         );
       }
       const f = FICHAS[id];
@@ -101,7 +110,7 @@ test.describe("PDV: ficha do cliente, dados pessoais", () => {
     fs.mkdirSync(EVIDENCIA, { recursive: true });
   });
 
-  test("a ficha mostra os dados pessoais e trata carregando, erro, não encontrado e ambíguo", async ({ page }) => {
+  test("a ficha mostra os dados pessoais e trata carregando, erro, não encontrado e telefone de outro cliente", async ({ page }) => {
     test.setTimeout(180_000);
     await loginComoDono(page, lerCreds());
 
@@ -183,11 +192,13 @@ test.describe("PDV: ficha do cliente, dados pessoais", () => {
     await expect(page.getByTestId("ficha-nao-encontrado")).toHaveText("Cliente não encontrado no ERP. Busque de novo.");
     await page.screenshot({ path: path.join(EVIDENCIA, "us-016-nao-encontrado.png"), fullPage: true });
 
-    // 11. Contato ambíguo (409): orientação, sem "Tentar de novo".
+    // 11. Telefone já vinculado a outro cliente do ERP: diz qual contato é, sem botão de vincular.
     await page.getByTestId("cliente-c5").click();
-    await expect(page.getByTestId("ficha-ambiguo")).toContainText("Há mais de um contato com os dados deste cliente");
-    await expect(page.getByRole("button", { name: "Tentar de novo" })).toHaveCount(0);
-    await page.screenshot({ path: path.join(EVIDENCIA, "us-016-contato-ambiguo.png"), fullPage: true });
+    await expect(page.getByTestId("vinculo-estado")).toContainText("Este telefone já está vinculado a outro cliente do ERP");
+    await expect(page.getByTestId("vinculo-estado")).toContainText("Maria Original");
+    await expect(page.getByTestId("vinculo-vincular")).toHaveCount(0);
+    await expect(page.getByTestId("ficha-nome-valor")).toHaveText("Maria Duplicada");
+    await page.screenshot({ path: path.join(EVIDENCIA, "us-016-telefone-de-outro-cliente.png"), fullPage: true });
 
     // 12. Resultado único (telefone) abre a ficha direto.
     await page.getByTestId("busca-modo").click();

@@ -1388,6 +1388,10 @@ export const AUDIT_ACTIONS = [
   "contact.duplicate_dismissed",
   /** Módulo PDV: loja adicionada do ERP, ativada/desativada ou ligada a uma conexão de WhatsApp. */
   "pdv.store.updated",
+  /** Módulo PDV: cliente do ERP vinculado a um contato do CRM pelo telefone (botão da ficha). */
+  "pdv.customer.linked",
+  /** Módulo PDV: contato vinculado atualizado com os dados do ERP (botão da ficha). */
+  "pdv.customer.updated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

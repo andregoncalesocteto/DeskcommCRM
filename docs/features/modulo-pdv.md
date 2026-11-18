@@ -66,10 +66,12 @@ de núcleo e fica como plano B.
   `evidence/modulo-pdv/`.
 - **Status HTTP do ERP** são escolhas desta entrega, não do contrato: `erp_nao_configurado`
   = 409, ERP fora do ar = 502 e tempo esgotado = 504 (ambos com código `erp_indisponivel`),
-  `termo_invalido` = 422, cliente inexistente = 404, contato ambíguo = 409.
+  `termo_invalido` = 422, cliente inexistente = 404. Nas ações de vínculo: contato ambíguo, telefone de outro cliente e sem vínculo = 409, cliente sem telefone = 422.
 - **Sem auditoria de visualização da ficha.** `GET /pdv/clientes/{id}` não grava
-  `api_audit_log`; `pdv.customer.viewed` segue como hipótese em aberto. A rota leva
-  `requireSupportWrite(` porque o vínculo é uma escrita dentro de um GET. O termo de busca e
+  `api_audit_log`; `pdv.customer.viewed` segue como hipótese em aberto. A ficha é
+  leitura pura (ADR-007); o vínculo é feito pelas rotas `POST` e `PATCH` de
+  `/pdv/clientes/{id}/vinculo`, que levam `requireSupportWrite(` e auditam `pdv.customer.linked` e
+  `pdv.customer.updated`. O termo de busca e
   o CPF não vão a log, Sentry nem auditoria.
 - **LGPD do vínculo:** `pdv_customer_links` só guarda ids opacos e fica fora de
   `modulo_secoes_lgpd` (entra na allowlist com motivo escrito). Anonimizar o contato deixa a

@@ -1,14 +1,16 @@
 "use client";
 /**
- * Ficha do cliente do PDV, somente leitura: blocos "Dados pessoais" e "Endereços (N)" de
- * `GET /api/v1/pdv/clientes/{id}`.
+ * Ficha do cliente do PDV: blocos "Vínculo com o CRM", "Dados pessoais" e "Endereços (N)" de
+ * `GET /api/v1/pdv/clientes/{id}`. Abrir a ficha só LÊ; o atendente liga o cliente ao contato do CRM
+ * (pelo telefone) com "Vincular ao CRM" e puxa os dados do ERP com "Atualizar dados" (ADR-007).
  *
  * LGPD: CPF e data de nascimento vivem só no estado do react-query desta tela (`gcTime: 0`). Nunca
  * vão para URL, storage nem log; o CPF é exibido mascarado (`mascaraCpf`, quatro últimos dígitos).
  * Sem botão de editar, adicionar, remover, tornar principal ou selecionar: isso é de outras histórias
  * (edição de endereço depende da fatia E2 do ERP).
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,8 +31,14 @@ type Endereco = {
   loja_entrega: { codigo: string; sigla: string } | null;
 };
 
+type Vinculo =
+  | { estado: "vinculado"; contact_id: string; contato_nome: string }
+  | { estado: "telefone_de_outro"; contato_nome: string }
+  | { estado: "livre" | "sem_telefone" | "ambiguo" };
+
 type Ficha = {
   id: string;
+  vinculo: Vinculo;
   nome: string;
   telefone: string | null;
   email: string | null;
@@ -49,6 +57,105 @@ function dataBr(iso: string | null): string | null {
 function cepBr(cep: string): string {
   const d = cep.replace(/\D/g, "");
   return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : cep;
+}
+
+/** Mensagem de erro do botão: o código da API diz o que o atendente pode fazer. */
+function mensagemDoErro(erro: unknown, t: (k: string) => string): string {
+  const codigo = erro instanceof ApiError ? erro.code : undefined;
+  if (codigo === "contato_ambiguo") {
+    return t(
+      "Há mais de um contato com este telefone. Peça ao gerente que una os contatos antes de continuar.",
+    );
+  }
+  if (codigo === "telefone_de_outro_cliente") {
+    return t("Este telefone já está vinculado a outro cliente do ERP.");
+  }
+  if (codigo === "cliente_sem_telefone") return t("Este cliente não tem telefone no ERP.");
+  return t("Não foi possível concluir. Tente de novo.");
+}
+
+function VinculoComOCrm({ erpId, vinculo }: { erpId: string; vinculo: Vinculo }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const rota = `/api/v1/pdv/clientes/${encodeURIComponent(erpId)}/vinculo`;
+  const depois = async (r: { data: { sem_cpf_email: boolean } }, ok: string) => {
+    await qc.invalidateQueries({ queryKey: ["pdv", "cliente", erpId] });
+    toast.success(ok);
+    if (r.data.sem_cpf_email) {
+      toast.warning(t("CPF ou e-mail já pertencem a outro contato e não foram copiados."));
+    }
+  };
+  const vincular = useMutation({
+    mutationFn: () => apiClient.post<{ data: { sem_cpf_email: boolean } }>(rota, {}),
+    onSuccess: (r) => depois(r, t("Cliente vinculado ao CRM")),
+  });
+  const atualizar = useMutation({
+    mutationFn: () => apiClient.patch<{ data: { sem_cpf_email: boolean } }>(rota, {}),
+    onSuccess: (r) => depois(r, t("Dados do contato atualizados")),
+  });
+  const erro = vincular.error ?? atualizar.error;
+  const ocupado = vincular.isPending || atualizar.isPending;
+
+  let texto: string;
+  let acao: React.ReactNode = null;
+  if (vinculo.estado === "vinculado") {
+    texto = `${t("Vinculado ao contato")}: ${vinculo.contato_nome}`;
+    acao = (
+      <Button
+        variant="outline"
+        className="h-11 lg:h-11"
+        disabled={ocupado}
+        data-testid="vinculo-atualizar"
+        onClick={() => atualizar.mutate()}
+      >
+        {t("Atualizar dados")}
+      </Button>
+    );
+  } else if (vinculo.estado === "livre") {
+    texto = t("Este cliente ainda não está no CRM.");
+    acao = (
+      <Button
+        className="h-11 lg:h-11"
+        disabled={ocupado}
+        data-testid="vinculo-vincular"
+        onClick={() => vincular.mutate()}
+      >
+        {t("Vincular ao CRM")}
+      </Button>
+    );
+  } else if (vinculo.estado === "telefone_de_outro") {
+    texto = `${t("Este telefone já está vinculado a outro cliente do ERP")}: ${vinculo.contato_nome}`;
+  } else if (vinculo.estado === "sem_telefone") {
+    texto = t("Este cliente não tem telefone no ERP. Sem telefone não há como vincular ao CRM.");
+  } else {
+    texto = t(
+      "Há mais de um contato com este telefone. Peça ao gerente que una os contatos antes de continuar.",
+    );
+  }
+  const bloqueado = vinculo.estado !== "vinculado" && vinculo.estado !== "livre";
+
+  return (
+    <section
+      className="flex min-w-0 flex-col gap-3 rounded-md border border-border p-4"
+      data-testid="vinculo"
+      data-estado={vinculo.estado}
+    >
+      <h2 className="text-base font-semibold">{t("Vínculo com o CRM")}</h2>
+      <p
+        className={bloqueado ? "text-danger text-sm break-words" : "text-sm break-words"}
+        data-testid="vinculo-estado"
+        role={bloqueado ? "alert" : undefined}
+      >
+        {texto}
+      </p>
+      {acao ? <div className="flex">{acao}</div> : null}
+      {erro ? (
+        <p className="text-danger text-sm" role="alert" data-testid="vinculo-erro">
+          {mensagemDoErro(erro, t)}
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 export function FichaDoCliente({ erpId }: { erpId: string | null }) {
@@ -106,19 +213,6 @@ export function FichaDoCliente({ erpId }: { erpId: string | null }) {
         </p>
       );
     }
-    if (api?.code === "contato_ambiguo") {
-      return (
-        <p
-          data-testid="ficha-ambiguo"
-          role="alert"
-          className="text-danger rounded-md border border-border p-4 text-sm"
-        >
-          {t(
-            "Há mais de um contato com os dados deste cliente. Avise o gerente para resolver antes de continuar.",
-          )}
-        </p>
-      );
-    }
     const semErp = api?.code === "erp_nao_configurado";
     return (
       <div
@@ -154,6 +248,7 @@ export function FichaDoCliente({ erpId }: { erpId: string | null }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
+      <VinculoComOCrm erpId={c.id} vinculo={c.vinculo} />
       <section
         className="flex min-w-0 flex-col gap-3 rounded-md border border-border p-4"
         data-testid="ficha"

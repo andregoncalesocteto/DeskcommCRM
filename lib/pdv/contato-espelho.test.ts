@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { hashCpf } from "@/lib/contacts/cpf";
-import { ContatoEspelhoError, vincularClienteDoErp, type ClienteParaEspelho } from "./contato-espelho";
+import {
+  atualizarContatoDoErp,
+  consultarVinculo,
+  ContatoEspelhoError,
+  vincularClienteDoErp,
+  type ClienteParaEspelho,
+} from "./contato-espelho";
 
 const ORG = "bcc12320-f555-4fef-8d90-38a0ac5950e0";
 const OUTRA_ORG = "11111111-2222-4333-8444-555555555555";
@@ -40,7 +46,8 @@ function banco(opcoes: { rpcDeCpf?: boolean; aoInserirContato?: () => void } = {
     const filtros: Array<[string, unknown]> = [];
     const ins: Array<[string, unknown[]]> = [];
     const nulos: string[] = [];
-    let modo: "select" | "insert" | "delete" = "select";
+    let modo: "select" | "insert" | "delete" | "update" = "select";
+    let patch: Linha | null = null;
     let novo: Linha | null = null;
 
     const casa = (l: Linha) =>
@@ -61,6 +68,25 @@ function banco(opcoes: { rpcDeCpf?: boolean; aoInserirContato?: () => void } = {
         daTabela(tabela).push(linha);
         return { data: linha, error: null };
       }
+      if (modo === "update" && patch) {
+        const alvos = daTabela(tabela).filter(casa);
+        for (const alvo of alvos) {
+          const outros = daTabela(tabela).filter(
+            (l) => l !== alvo && l.organization_id === alvo.organization_id,
+          );
+          const novo = { ...alvo, ...patch };
+          const dup = outros.some(
+            (l) =>
+              (novo.cpf_hash && l.cpf_hash === novo.cpf_hash) ||
+              (novo.email &&
+                typeof l.email === "string" &&
+                l.email.toLowerCase() === String(novo.email).toLowerCase()),
+          );
+          if (dup) return { data: null, error: { code: "23505", message: "dup" } };
+          Object.assign(alvo, patch);
+        }
+        return { data: null, error: null };
+      }
       if (modo === "delete") {
         tabelas[tabela] = daTabela(tabela).filter((l) => !casa(l));
         return { data: null, error: null };
@@ -75,6 +101,7 @@ function banco(opcoes: { rpcDeCpf?: boolean; aoInserirContato?: () => void } = {
       in: (c: string, vs: unknown[]) => (ins.push([c, vs]), cadeia),
       insert: (linha: Linha) => ((modo = "insert"), (novo = linha), cadeia),
       delete: () => ((modo = "delete"), cadeia),
+      update: (p: Linha) => ((modo = "update"), (patch = p), cadeia),
       single: async () => {
         const r = await executar();
         return Array.isArray(r.data) ? { data: r.data[0] ?? null, error: r.error } : r;
@@ -115,11 +142,11 @@ function contatoExistente(extra: Linha): Linha {
   return { id: "existente", organization_id: ORG, kind: "person", is_merged_into: null, ...extra };
 }
 
-describe("vincularClienteDoErp", () => {
-  it("cria o contato e o vínculo quando ninguém casa", async () => {
+describe("vincularClienteDoErp (o telefone é a chave, ADR-007)", () => {
+  it("cria o contato e o vínculo quando o telefone é novo", async () => {
     const { tabelas, supabase } = banco();
     const r = await vincularClienteDoErp(ORG, CLIENTE, { supabase });
-    expect(r).toMatchObject({ contatoCriado: true, vinculoNovo: true });
+    expect(r).toMatchObject({ contatoCriado: true, vinculoNovo: true, semCpfEmail: false });
     expect(tabelas.contacts).toHaveLength(1);
     expect(primeira(tabelas.contacts)).toMatchObject({
       organization_id: ORG,
@@ -154,36 +181,62 @@ describe("vincularClienteDoErp", () => {
     expect(primeira(tabelas.contacts).cpf_encrypted).toBeUndefined();
   });
 
-  it("acha por telefone, também na variante sem o nono dígito, e só vincula", async () => {
+  it("acha por telefone, também na variante sem o nono dígito, e só vincula (não altera o contato)", async () => {
     const { tabelas, supabase } = banco();
-    tabelas.contacts.push(contatoExistente({ phone_number: "+551998765432" }));
+    tabelas.contacts.push(contatoExistente({ phone_number: "+551998765432", name: "Nome do CRM" }));
     const r = await vincularClienteDoErp(ORG, CLIENTE, { supabase });
-    expect(r).toEqual({ contactId: "existente", contatoCriado: false, vinculoNovo: true });
+    expect(r).toEqual({
+      contactId: "existente",
+      contatoCriado: false,
+      vinculoNovo: true,
+      semCpfEmail: false,
+    });
     expect(tabelas.contacts).toHaveLength(1);
-    expect(primeira(tabelas.contacts).name).toBeUndefined();
+    expect(primeira(tabelas.contacts).name).toBe("Nome do CRM");
   });
 
-  it("acha por hash do CPF", async () => {
+  it("o mesmo CPF em contato de OUTRO telefone não vira candidato: cria um contato novo, sem o CPF", async () => {
     const { tabelas, supabase } = banco();
-    tabelas.contacts.push(contatoExistente({ cpf_hash: hashCpf("52998224725") }));
+    tabelas.contacts.push(
+      contatoExistente({ id: "outro", phone_number: "+5511911110000", cpf_hash: hashCpf("52998224725") }),
+    );
     const r = await vincularClienteDoErp(ORG, CLIENTE, { supabase });
-    expect(r).toMatchObject({ contactId: "existente", contatoCriado: false, vinculoNovo: true });
+    expect(r).toMatchObject({ contatoCriado: true, vinculoNovo: true, semCpfEmail: true });
+    expect(r.contactId).not.toBe("outro");
+    expect(tabelas.contacts).toHaveLength(2);
+    const novo = tabelas.contacts.find((c) => c.id === r.contactId) as Linha;
+    expect(novo.phone_number).toBe("+5519998765432");
+    expect(novo.cpf_hash).toBeUndefined();
+    expect(novo.email).toBeNull();
+    expect(tabelas.pdv_customer_links).toHaveLength(1);
   });
 
-  it("acha por e-mail, sem diferenciar caixa", async () => {
+  it("o mesmo e-mail em contato de OUTRO telefone também não vira candidato", async () => {
     const { tabelas, supabase } = banco();
-    tabelas.contacts.push(contatoExistente({ email: "maria@exemplo.TEST" }));
+    tabelas.contacts.push(contatoExistente({ id: "outro", phone_number: "+5511911110000", email: "maria@exemplo.TEST" }));
     const r = await vincularClienteDoErp(ORG, CLIENTE, { supabase });
-    expect(r).toMatchObject({ contactId: "existente", contatoCriado: false, vinculoNovo: true });
+    expect(r).toMatchObject({ contatoCriado: true, semCpfEmail: true });
+    expect(r.contactId).not.toBe("outro");
   });
 
-  it("vínculo já existente é devolvido sem alterar nada", async () => {
+  it("cliente sem telefone utilizável: cliente_sem_telefone, nada é escrito", async () => {
+    const { tabelas, supabase } = banco();
+    for (const telefone of [null, "123"]) {
+      const erro = await vincularClienteDoErp(ORG, { ...CLIENTE, telefone }, { supabase }).catch((e) => e);
+      expect(erro).toBeInstanceOf(ContatoEspelhoError);
+      expect(erro.codigo).toBe("cliente_sem_telefone");
+    }
+    expect(tabelas.contacts).toHaveLength(0);
+    expect(tabelas.pdv_customer_links).toHaveLength(0);
+  });
+
+  it("vínculo já existente é devolvido sem alterar nada (nem exige telefone)", async () => {
     const { tabelas, supabase } = banco();
     tabelas.contacts.push(contatoExistente({ id: "ja" }));
     tabelas.pdv_customer_links.push({ organization_id: ORG, contact_id: "ja", erp_customer_id: "c-0001" });
     const antes = JSON.stringify(tabelas);
-    const r = await vincularClienteDoErp(ORG, CLIENTE, { supabase });
-    expect(r).toEqual({ contactId: "ja", contatoCriado: false, vinculoNovo: false });
+    const r = await vincularClienteDoErp(ORG, { ...CLIENTE, telefone: null }, { supabase });
+    expect(r).toEqual({ contactId: "ja", contatoCriado: false, vinculoNovo: false, semCpfEmail: false });
     expect(JSON.stringify(tabelas)).toBe(antes);
   });
 
@@ -209,18 +262,6 @@ describe("vincularClienteDoErp", () => {
     expect([a.vinculoNovo, b.vinculoNovo].filter(Boolean)).toHaveLength(1);
   });
 
-  it("corrida sem telefone, CPF nem e-mail: o contato órfão da perdedora é removido", async () => {
-    const { tabelas, supabase } = banco();
-    const semDados = { id: "c-9", nome: "Sem Dados", telefone: null, email: null };
-    const [a, b] = await Promise.all([
-      vincularClienteDoErp(ORG, semDados, { supabase }),
-      vincularClienteDoErp(ORG, semDados, { supabase }),
-    ]);
-    expect(b.contactId).toBe(a.contactId);
-    expect(tabelas.contacts).toHaveLength(1);
-    expect(tabelas.pdv_customer_links).toHaveLength(1);
-  });
-
   it("23505 no INSERT do contato (o concorrente grava no meio) leva ao contato que já existe", async () => {
     let tabelasRef: { contacts: Linha[] } | null = null;
     let jaApareceu = false;
@@ -237,11 +278,11 @@ describe("vincularClienteDoErp", () => {
     expect(tabelas.contacts).toHaveLength(1);
   });
 
-  it("mais de um candidato: não vincula nenhum e lança contato_ambiguo", async () => {
+  it("dois contatos no mesmo número (com e sem o nono dígito): contato_ambiguo, nada é ligado", async () => {
     const { tabelas, supabase } = banco();
     tabelas.contacts.push(
       contatoExistente({ id: "a", phone_number: "+5519998765432" }),
-      contatoExistente({ id: "b", cpf_hash: hashCpf("52998224725") }),
+      contatoExistente({ id: "b", phone_number: "+551998765432" }),
     );
     const erro = await vincularClienteDoErp(ORG, CLIENTE, { supabase }).catch((e) => e);
     expect(erro).toBeInstanceOf(ContatoEspelhoError);
@@ -250,13 +291,15 @@ describe("vincularClienteDoErp", () => {
     expect(tabelas.contacts).toHaveLength(2);
   });
 
-  it("contato já ligado a OUTRO cliente do ERP: contato_ambiguo, o vínculo não é roubado", async () => {
+  it("o contato do telefone já é de OUTRO cliente do ERP: telefone_de_outro_cliente, o vínculo não é roubado", async () => {
     const { tabelas, supabase } = banco();
     tabelas.contacts.push(contatoExistente({ id: "a", phone_number: "+5519998765432" }));
     tabelas.pdv_customer_links.push({ organization_id: ORG, contact_id: "a", erp_customer_id: "c-OUTRO" });
     const erro = await vincularClienteDoErp(ORG, CLIENTE, { supabase }).catch((e) => e);
-    expect(erro).toMatchObject({ codigo: "contato_ambiguo", detalhes: { motivo: "contato_de_outro_cliente" } });
+    expect(erro).toBeInstanceOf(ContatoEspelhoError);
+    expect(erro.codigo).toBe("telefone_de_outro_cliente");
     expect(tabelas.pdv_customer_links).toHaveLength(1);
+    expect(tabelas.pdv_customer_links[0]?.erp_customer_id).toBe("c-OUTRO");
   });
 
   it("isolamento: contato de outra organização não casa, e toda consulta filtra a organização", async () => {
@@ -264,7 +307,6 @@ describe("vincularClienteDoErp", () => {
     tabelas.contacts.push(
       contatoExistente({ id: "x", organization_id: OUTRA_ORG, phone_number: "+5519998765432" }),
     );
-    // o filtro de org das consultas impede o casamento; a unicidade do falso é por organização
     const r = await vincularClienteDoErp(ORG, CLIENTE, { supabase });
     expect(r.contatoCriado).toBe(true);
     expect(r.contactId).not.toBe("x");
@@ -274,14 +316,14 @@ describe("vincularClienteDoErp", () => {
     }
   });
 
-  it("ignora e-mail, telefone e data fora do formato que o banco aceita", async () => {
+  it("ignora e-mail, data e CPF fora do formato que o banco aceita", async () => {
     const { tabelas, supabase } = banco();
     await vincularClienteDoErp(
       ORG,
-      { id: "c-5", nome: "Ana", telefone: "123", email: "sem-arroba", data_nascimento: "17/05/1990", cpf: "123" },
+      { id: "c-5", nome: "Ana", telefone: "+5519991112222", email: "sem-arroba", data_nascimento: "17/05/1990", cpf: "123" },
       { supabase },
     );
-    expect(primeira(tabelas.contacts)).toMatchObject({ phone_number: null, email: null, birthdate: null });
+    expect(primeira(tabelas.contacts)).toMatchObject({ email: null, birthdate: null });
     expect(primeira(tabelas.contacts).cpf_hash).toBeUndefined();
   });
 
@@ -292,7 +334,7 @@ describe("vincularClienteDoErp", () => {
     const { tabelas, supabase } = banco();
     tabelas.contacts.push(
       contatoExistente({ id: "a", phone_number: "+5519998765432" }),
-      contatoExistente({ id: "b", cpf_hash: hashCpf("52998224725") }),
+      contatoExistente({ id: "b", phone_number: "+551998765432" }),
     );
     const erro = (await vincularClienteDoErp(ORG, CLIENTE, { supabase }).catch((e) => e)) as Error;
     const saida = JSON.stringify(espioes.flatMap((e) => e.mock.calls)) + erro.message + JSON.stringify(erro);
@@ -300,5 +342,138 @@ describe("vincularClienteDoErp", () => {
     for (const segredo of ["52998224725", "529.982.247-25", "998765432", "maria@exemplo", "Maria Teste"]) {
       expect(saida.toLowerCase()).not.toContain(segredo.toLowerCase());
     }
+  });
+});
+
+describe("consultarVinculo (só lê)", () => {
+  it("vinculado: devolve o contato e o nome", async () => {
+    const { tabelas, supabase } = banco();
+    tabelas.contacts.push(contatoExistente({ id: "ja", name: "Maria no CRM" }));
+    tabelas.pdv_customer_links.push({ organization_id: ORG, contact_id: "ja", erp_customer_id: "c-0001" });
+    expect(await consultarVinculo(ORG, CLIENTE, { supabase })).toEqual({
+      estado: "vinculado",
+      contactId: "ja",
+      contatoNome: "Maria no CRM",
+    });
+  });
+
+  it("livre: sem contato no telefone, e com contato livre no telefone", async () => {
+    const { tabelas, supabase } = banco();
+    expect(await consultarVinculo(ORG, CLIENTE, { supabase })).toEqual({ estado: "livre" });
+    tabelas.contacts.push(contatoExistente({ phone_number: "+5519998765432" }));
+    expect(await consultarVinculo(ORG, CLIENTE, { supabase })).toEqual({ estado: "livre" });
+  });
+
+  it("telefone_de_outro: o contato do número é de outro cliente do ERP (o caso do telefone repetido)", async () => {
+    const { tabelas, supabase } = banco();
+    tabelas.contacts.push(contatoExistente({ id: "a", phone_number: "+5519998765432", name: "Dona do número" }));
+    tabelas.pdv_customer_links.push({ organization_id: ORG, contact_id: "a", erp_customer_id: "c-OUTRO" });
+    expect(await consultarVinculo(ORG, CLIENTE, { supabase })).toEqual({
+      estado: "telefone_de_outro",
+      contatoNome: "Dona do número",
+    });
+  });
+
+  it("sem_telefone e ambiguo", async () => {
+    const { tabelas, supabase } = banco();
+    expect(await consultarVinculo(ORG, { id: "c-0001", telefone: null }, { supabase })).toEqual({
+      estado: "sem_telefone",
+    });
+    tabelas.contacts.push(
+      contatoExistente({ id: "a", phone_number: "+5519998765432" }),
+      contatoExistente({ id: "b", phone_number: "+551998765432" }),
+    );
+    expect(await consultarVinculo(ORG, CLIENTE, { supabase })).toEqual({ estado: "ambiguo" });
+  });
+
+  it("nunca escreve: nenhuma tabela muda, em qualquer estado, e toda consulta filtra a organização", async () => {
+    const { tabelas, consultas, supabase } = banco();
+    tabelas.contacts.push(contatoExistente({ id: "a", phone_number: "+5519998765432" }));
+    const antes = JSON.stringify(tabelas);
+    await consultarVinculo(ORG, CLIENTE, { supabase });
+    await consultarVinculo(ORG, { id: "c-9", telefone: "+5511900000000" }, { supabase });
+    expect(JSON.stringify(tabelas)).toBe(antes);
+    for (const c of consultas) {
+      expect(c.filtros.find(([col]) => col === "organization_id")?.[1]).toBe(ORG);
+    }
+  });
+});
+
+describe("atualizarContatoDoErp", () => {
+  function vinculado() {
+    const b = banco();
+    b.tabelas.contacts.push(
+      contatoExistente({
+        id: "ja",
+        phone_number: "+5519998765432",
+        name: "Nome antigo",
+        email: "antigo@exemplo.test",
+        birthdate: "1980-01-01",
+      }),
+    );
+    b.tabelas.pdv_customer_links.push({ organization_id: ORG, contact_id: "ja", erp_customer_id: "c-0001" });
+    return b;
+  }
+
+  it("o ERP sobrescreve nome, e-mail, CPF e nascimento; o telefone não muda", async () => {
+    const { tabelas, supabase } = vinculado();
+    const r = await atualizarContatoDoErp(ORG, { ...CLIENTE, telefone: "+5511900000000" }, { supabase });
+    expect(r).toEqual({ contactId: "ja", semCpfEmail: false });
+    expect(primeira(tabelas.contacts)).toMatchObject({
+      name: "Maria Teste",
+      email: "Maria@Exemplo.test",
+      birthdate: "1990-05-17",
+      phone_number: "+5519998765432",
+      cpf_hash: hashCpf("52998224725"),
+    });
+    expect(JSON.stringify(tabelas.contacts)).not.toContain("52998224725");
+  });
+
+  it("dado que o ERP não tem (ou veio inválido) não apaga o que o CRM guarda", async () => {
+    const { tabelas, supabase } = vinculado();
+    await atualizarContatoDoErp(
+      ORG,
+      { ...CLIENTE, email: null, cpf: null, data_nascimento: "17/05/1990" },
+      { supabase },
+    );
+    expect(primeira(tabelas.contacts)).toMatchObject({
+      name: "Maria Teste",
+      email: "antigo@exemplo.test",
+      birthdate: "1980-01-01",
+    });
+  });
+
+  it("CPF de outro contato: grava o resto e avisa com semCpfEmail", async () => {
+    const { tabelas, supabase } = vinculado();
+    tabelas.contacts.push(
+      contatoExistente({ id: "outro", phone_number: "+5511900000000", cpf_hash: hashCpf("52998224725") }),
+    );
+    const r = await atualizarContatoDoErp(ORG, CLIENTE, { supabase });
+    expect(r).toEqual({ contactId: "ja", semCpfEmail: true });
+    const ja = tabelas.contacts.find((c) => c.id === "ja") as Linha;
+    expect(ja.name).toBe("Maria Teste");
+    expect(ja.birthdate).toBe("1990-05-17");
+    expect(ja.cpf_hash).toBeUndefined();
+    expect(ja.email).toBe("antigo@exemplo.test");
+  });
+
+  it("sem vínculo: sem_vinculo, e nada é escrito", async () => {
+    const { tabelas, supabase } = banco();
+    tabelas.contacts.push(contatoExistente({ id: "a", phone_number: "+5519998765432", name: "Intacto" }));
+    const antes = JSON.stringify(tabelas);
+    const erro = await atualizarContatoDoErp(ORG, CLIENTE, { supabase }).catch((e) => e);
+    expect(erro).toBeInstanceOf(ContatoEspelhoError);
+    expect(erro.codigo).toBe("sem_vinculo");
+    expect(JSON.stringify(tabelas)).toBe(antes);
+  });
+
+  it("isolamento: só toca o contato vinculado da própria organização", async () => {
+    const { tabelas, supabase } = vinculado();
+    tabelas.contacts.push(
+      contatoExistente({ id: "ja", organization_id: OUTRA_ORG, name: "De outra org", phone_number: "+5519998765432" }),
+    );
+    await atualizarContatoDoErp(ORG, CLIENTE, { supabase });
+    const deOutraOrg = tabelas.contacts.find((c) => c.organization_id === OUTRA_ORG) as Linha;
+    expect(deOutraOrg.name).toBe("De outra org");
   });
 });
