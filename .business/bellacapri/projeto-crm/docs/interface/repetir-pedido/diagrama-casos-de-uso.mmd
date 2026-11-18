@@ -1,0 +1,14 @@
+flowchart LR
+  Atendente([Atendente])
+  ERP([ERP via MCP])
+
+  subgraph PDV[Histórico e recompra]
+    UC01((UC01 Ver o histórico))
+    UC02((UC02 Repetir o último pedido))
+  end
+
+  Atendente --- UC01
+  Atendente --- UC02
+  UC01 --- ERP
+  UC02 --- ERP
+  UC02 -. include .-> UC01

@@ -1,0 +1,22 @@
+flowchart LR
+  Atendente([Atendente])
+  Gerente([Gerente])
+  IA([Assistente de IA])
+  ERP([ERP via MCP])
+
+  subgraph PDV[Assistente do atendente]
+    UC01((UC01 Pedir ao assistente))
+    UC02((UC02 Ver o que falta))
+    UC03((UC03 Acompanhar uso e custo))
+  end
+
+  Valida((Validar e aplicar ao pedido))
+
+  Atendente --- UC01
+  Atendente --- UC02
+  Gerente --- UC03
+  UC01 --- IA
+  UC02 --- IA
+  Valida --- ERP
+  UC01 -. include .-> Valida
+  UC02 -. extend .-> UC01

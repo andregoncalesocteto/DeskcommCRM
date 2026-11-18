@@ -1,0 +1,31 @@
+flowchart LR
+  Atendente([Atendente])
+  ERP([ERP via MCP])
+  Worker([Worker de envio])
+
+  subgraph PDV[Fazer o pedido]
+    UC01((UC01 Configurar pizza))
+    UC02((UC02 Revisar o carrinho))
+    UC03((UC03 Definir tipo, loja e endereço))
+    UC04((UC04 Confirmar e enviar o pedido))
+    UC05((UC05 Acompanhar, corrigir ou reenviar))
+  end
+
+  Add((Adicionar ao carrinho))
+  End((Gerenciar endereços))
+
+  Atendente --- UC01
+  Atendente --- UC02
+  Atendente --- UC03
+  Atendente --- UC04
+  Atendente --- UC05
+  UC01 --- ERP
+  UC02 --- ERP
+  UC03 --- ERP
+  UC04 --- Worker
+  Worker --- ERP
+  UC05 --- ERP
+  UC01 -. extend .-> Add
+  UC03 -. include .-> End
+  UC04 -. include .-> UC03
+  UC05 -. extend .-> UC04

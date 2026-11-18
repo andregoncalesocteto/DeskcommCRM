@@ -397,8 +397,8 @@ Os números dos ADRs são do projeto Bella Capri e não colidem com `docs/adr/` 
 
 ## 11. Pendências abertas (herdadas dos PRDs)
 
-- Pagamento: o PDV só registra a forma pretendida e o troco, ou não toca em pagamento?
-- Quem confirma o envio ao ERP: o atendente (assumido aqui) ou envio automático?
-- Loja calculada pelo ERP fora do tenant do operador: recusar ou encaminhar?
+- ~~Pagamento~~ **Resolvida em 2026-11-18:** o PDV só registra a forma pretendida e o troco (ver notas do README dos ADRs).
+- ~~Quem confirma o envio ao ERP~~ **Resolvida em 2026-11-18:** o atendente, com um clique.
+- ~~Loja calculada pelo ERP fora do tenant do operador~~ **Resolvida em 2026-11-18:** recusar e avisar.
 - Uma conexão de WhatsApp pode atender mais de uma loja (muda `channel_session_id` para uma tabela de junção)?
 - As 12 perguntas ainda em aberto ao ERP (seção 5.2 do contrato), em especial idempotência na criação de pedido e identificadores estáveis de produto, tamanho e adicional.
